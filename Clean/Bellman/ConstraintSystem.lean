@@ -16,8 +16,8 @@ Emitting operations never runs a witness function, as groth16's key generation n
 bellman's witness closures. A circuit can still take witness values as arguments, as bellman's
 `Option` fields do; key generation passes `None`, so the prover's rows are the key's only when
 they do not depend on those values. A bellman closure can fail (`AssignmentMissing`,
-`DivisionByZero`); a witness function here is total, and a gadget whose closure can fail states
-the failing case among its completeness assumptions instead.
+`DivisionByZero`); a witness function here is total, and a gadget whose closure can fail
+excludes the failing case by a prover-side assumption instead.
 
 ## Namespaces
 

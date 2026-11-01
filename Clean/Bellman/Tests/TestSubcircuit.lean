@@ -42,14 +42,15 @@ def square : FormalCircuit F Variable Variable where
     simp only [List.mem_cons, List.not_mem_nil, or_false, forall_eq, circuit_norm] at h ⊢
     rw [← h, sq]
   completeness := by
-    intro o env v _ _ h
+    intro o env v _ _ _ h
     simp only [List.mem_cons, List.not_mem_nil, or_false, forall_eq, circuit_norm] at h ⊢
     exact h.symm
 
-/-- Call `b` twice in sequence, given that `b` raises to the power `k` and assumes nothing. -/
+/-- Call `b` twice in sequence, given that `b` raises to the power `k` and has no assumptions and
+no prover-side assumptions. -/
 def twice (b : FormalCircuit F Variable Variable) (k : ℕ)
     (hb : ∀ env v c, b.Spec env v c → env.get c = env.get v ^ k)
-    (hA : ∀ env v, b.Assumptions env v) :
+    (hA : ∀ env v, b.Assumptions env v) (hP : ∀ env v, b.ProverAssumptions env v) :
     FormalCircuit F Variable Variable where
   main v := do
     let a ← b.call v
@@ -74,12 +75,12 @@ def twice (b : FormalCircuit F Variable Variable) (k : ℕ)
     have h₂ := hb _ _ _ (b.soundness _ env _ h1 (hA _ _)
       fun r hr => h r (List.mem_append_right _ hr))
     rw [h₂, h₁, ← pow_mul]
-  completeness o env v h1 _ h := by
+  completeness o env v h1 _ _ h := by
     simp only [circuit_norm] at h
-    intro r hr
+    refine ⟨fun r hr => ?_, trivial⟩
     rcases List.mem_append.1 hr with hr | hr
-    · exact b.completeness_call o env v h1 (hA _ _) h.1 r hr
-    · exact b.completeness_call _ env _ h1 (hA _ _) h.2 r hr
+    · exact (b.completeness_call o env v h1 (hA _ _) (hP _ _) h.1).1 r hr
+    · exact (b.completeness_call _ env _ h1 (hA _ _) (hP _ _) h.2).1 r hr
 
 /-- The exponent after `d` doublings of the tree, `2 ^ 2 ^ d`, kept folded so that Lean does
 not evaluate it. -/
@@ -94,10 +95,11 @@ attribute [irreducible] ex
 /-- `2 ^ d` squaring gadgets, each level calling the one below twice. -/
 def nest : (d : ℕ) → { b : FormalCircuit F Variable Variable //
     (∀ env v c, b.Spec env v c → env.get c = env.get v ^ ex d) ∧
-      ∀ env v, b.Assumptions env v }
-  | 0 => ⟨square, fun _ _ _ h => by rw [ex_zero]; exact h, fun _ _ => trivial⟩
-  | d + 1 => ⟨twice (nest d).1 _ (nest d).2.1 (nest d).2.2,
-      fun env v c h => by rw [ex_succ]; exact h, fun _ _ => trivial⟩
+      (∀ env v, b.Assumptions env v) ∧ ∀ env v, b.ProverAssumptions env v }
+  | 0 => ⟨square, fun _ _ _ h => by rw [ex_zero]; exact h, fun _ _ => trivial,
+      fun _ _ => trivial⟩
+  | d + 1 => ⟨twice (nest d).1 _ (nest d).2.1 (nest d).2.2.1 (nest d).2.2.2,
+      fun env v c h => by rw [ex_succ]; exact h, fun _ _ => trivial, fun _ _ => trivial⟩
 
 -- soundness of 1,024 gadgets through the children's specs
 example (o : Offset) (env : Environment F) (v : Variable) (h1 : env.input 0 = 1)
@@ -105,13 +107,14 @@ example (o : Offset) (env : Environment F) (v : Variable) (h1 : env.input 0 = 1)
     env.get (((nest (F := F) 10).1.call v).output o) = env.get v ^ ex 10 := by
   rw [FormalCircuit.constraints_call] at h
   rw [FormalCircuit.output_call]
-  exact (nest 10).2.1 _ _ _ ((nest 10).1.soundness o env v h1 ((nest 10).2.2 _ _) h)
+  exact (nest 10).2.1 _ _ _ ((nest 10).1.soundness o env v h1 ((nest 10).2.2.1 _ _) h)
 
 -- the assignment computed from ONE satisfies every row of the 1,024 gadgets
 example (hint : ProverHint F) (v : Variable) (hv : v.Below Offset.start) :
     ∀ r ∈ (nest (F := F) 10).1.rowsAt v Offset.start,
       r.Holds ((nest (F := F) 10).1.computedEnv hint v Offset.start [1] []).toEnvironment :=
-  (nest 10).1.complete_computed hint v _ [1] [] rfl rfl rfl hv ((nest 10).2.2 _ _)
+  ((nest 10).1.complete_computed hint v _ [1] [] rfl rfl rfl hv ((nest 10).2.2.1 _ _)
+    ((nest 10).2.2.2 _ _)).1
 
 /-- The squaring row `a · a = c`. -/
 def sqRow (a c : Variable) : Constraint (ZMod 7) :=
@@ -156,7 +159,7 @@ def allocBit : FormalCircuit F (Option Bool) Variable where
     · right; exact (sub_eq_zero.1 h).symm
     · left; exact h
   completeness := by
-    intro o env v h1 _ h
+    intro o env v h1 _ _ h
     simp only [List.mem_cons, List.not_mem_nil, or_false, forall_eq, circuit_norm, h1] at h ⊢
     rw [h]; split <;> simp
 
@@ -214,7 +217,7 @@ def condReverse [DecidableEq F] :
     · simp only [h1, if_true, mul_one, sub_right_inj] at h₁ h₂ ⊢
       exact ⟨h₁.symm, h₂.symm⟩
   completeness := by
-    rintro o env ⟨a, b, cond⟩ _ hb h
+    rintro o env ⟨a, b, cond⟩ _ hb _ h
     change env.get cond = 0 ∨ env.get cond = 1 at hb
     simp only [List.mem_cons, List.not_mem_nil, or_false, forall_eq_or_imp, forall_eq,
       circuit_norm, List.cons_append, List.nil_append] at h ⊢
@@ -300,15 +303,15 @@ def reverseByBit :
     exact ⟨hb, condReverse.soundness _ env (reverseByBitIn x o) h1 hb
       fun r hr => h r (List.mem_append_right _ hr)⟩
   completeness := by
-    intro o env x h1 _ h
+    intro o env x h1 _ _ h
     simp only [reverseByBitMain, circuit_norm, List.cons_append, List.nil_append] at h
     obtain ⟨hbit, -, hrev⟩ := h
-    have rb := allocBit.completeness_call o env _ h1 trivial hbit
+    have rb := (allocBit.completeness_call o env _ h1 trivial trivial hbit).1
     have sb := allocBit.soundness o env.toEnvironment _ h1 trivial rb
-    intro r hr
+    refine ⟨fun r hr => ?_, trivial⟩
     rcases List.mem_append.1 hr with hr | hr
     · exact rb r hr
-    · exact condReverse.completeness_call _ env _ h1 sb hrev r hr
+    · exact (condReverse.completeness_call _ env _ h1 sb trivial hrev).1 r hr
 
 -- the parent's spec, read: the bit is a bit and the pair is reversed by it
 example (o : Offset) (env : Environment F) (x : Variable × Option (F × Bool))
@@ -327,8 +330,8 @@ def envS : ProverEnvironment (ZMod 7) :=
 -- calls with `operations_call`, since the kernel does not reduce through them
 example : (∀ r ∈ (reverseByBit (F := ZMod 7)).rowsAt (⟨.input 1⟩, some (5, true))
       ⟨2, 0⟩, r.Holds envS.toEnvironment) ∧ envS.aux 2 = 5 ∧ envS.aux 3 = 3 := by
-  refine ⟨reverseByBit.complete_computed _ _ _ [1, 3] [] rfl rfl rfl
-    ⟨show 1 < 2 by omega, trivial⟩ trivial, ?_⟩
+  refine ⟨(reverseByBit.complete_computed _ _ _ [1, 3] [] rfl rfl rfl
+    ⟨show 1 < 2 by omega, trivial⟩ trivial trivial).1, ?_⟩
   simp only [envS, FormalCircuit.computedEnv, reverseByBit, reverseByBitMain, circuit_norm,
     FormalCircuit.operations_call, FormalCircuit.output_call, FormalCircuit.nextOffset_call]
   decide

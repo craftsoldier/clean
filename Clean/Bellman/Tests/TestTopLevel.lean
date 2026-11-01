@@ -10,8 +10,9 @@ Pins top-level circuits, from a private value to the relation on public inputs:
   prover's public inputs are in it and are `[x · x]`;
 - a parent built from calls: a private bit (`AllocatedBit::alloc`), then a private value made
   public (`AllocatedNum::alloc`, `inputize`), made top-level from the children's independence
-  alone. The relation forces the bit to be boolean and the public input to be the value, and the
-  prover's public input is the value;
+  alone, with the children's prover-side assumptions and specs as its own. The relation forces
+  the bit to be boolean and the public input to be the value, and the prover's public input is
+  the value;
 - a circuit with no public inputs: the relation holds exactly at `[]`.
 -/
 
@@ -49,7 +50,7 @@ def square : FormalCircuit F (Option F) Variable where
     simp only [List.mem_singleton, forall_eq, circuit_norm, zero_add] at h
     exact ⟨env.aux o.aux, by show env.input o.input = _; rw [← h, pow_two]⟩
   completeness := by
-    intro o env w _ _ hw
+    intro o env w _ _ _ hw
     simp only [squareMain, circuit_norm, List.append_nil, List.singleton_append] at hw
     simp only [List.mem_singleton, forall_eq, circuit_norm, zero_add]
     exact hw.2.symm
@@ -87,7 +88,7 @@ example (hint : ProverHint F) (x : F) :
         ([1], [])).1.tail ∧
     ((((squareTop (F := F)).formalCircuit.main (some x)).operations Offset.start).compute hint
         ([1], [])).1.tail = [x * x] :=
-  ⟨squareTop.completeness hint x, rfl⟩
+  ⟨squareTop.completeness hint x trivial, rfl⟩
 
 /-! ## A parent built from calls -/
 
@@ -112,7 +113,7 @@ def allocBit : FormalCircuit F (Option Bool) Variable where
     · right; exact (sub_eq_zero.1 h).symm
     · left; exact h
   completeness := by
-    intro o env v h1 _ h
+    intro o env v h1 _ _ h
     simp only [List.mem_cons, List.not_mem_nil, or_false, forall_eq, circuit_norm, h1] at h ⊢
     rw [h]; split <;> simp
 
@@ -141,7 +142,7 @@ def pub : FormalCircuit F (Option F) (Variable × Variable) where
     simp only [List.mem_singleton, forall_eq, circuit_norm, zero_add, h1, mul_one] at h ⊢
     exact h
   completeness := by
-    intro o env _ h1 _ hw
+    intro o env _ h1 _ _ hw
     simp only [pubMain, circuit_norm, List.append_nil, List.cons_append,
       List.nil_append] at hw
     simp only [List.mem_singleton, forall_eq, circuit_norm, zero_add, h1, mul_one]
@@ -158,7 +159,7 @@ def pairMain (w : Option (Bool × F)) : Circuit F (Variable × (Variable × Vari
   let p ← P.call (w.map Prod.snd)
   pure (b, p)
 
-def pair (hB : B.Assumptions = fun _ _ => True) (hP : P.Assumptions = fun _ _ => True) :
+def pair (hAB : B.Assumptions = fun _ _ => True) (hAP : P.Assumptions = fun _ _ => True) :
     FormalCircuit F (Option (Bool × F)) (Variable × (Variable × Variable)) where
   main := pairMain B P
   rowsAt w o := B.rowsAt (w.map Prod.fst) o ++
@@ -178,19 +179,25 @@ def pair (hB : B.Assumptions = fun _ _ => True) (hP : P.Assumptions = fun _ _ =>
       (P.le_nextOffset _ _).1 (P.le_nextOffset _ _).2,
     P.output_below _ _ trivial⟩
   Spec env w bp := B.Spec env (w.map Prod.fst) bp.1 ∧ P.Spec env (w.map Prod.snd) bp.2
+  ProverAssumptions env w := B.ProverAssumptions env (w.map Prod.fst) ∧
+    P.ProverAssumptions env (w.map Prod.snd)
+  ProverSpec env w bp := B.ProverSpec env (w.map Prod.fst) bp.1 ∧
+    P.ProverSpec env (w.map Prod.snd) bp.2
   soundness o env w h1 _ h :=
-    ⟨B.soundness o env _ h1 (by rw [hB]; trivial) fun r hr => h r (List.mem_append_left _ hr),
-      P.soundness _ env _ h1 (by rw [hP]; trivial) fun r hr => h r (List.mem_append_right _ hr)⟩
-  completeness o env w h1 _ h := by
+    ⟨B.soundness o env _ h1 (by rw [hAB]; trivial) fun r hr => h r (List.mem_append_left _ hr),
+      P.soundness _ env _ h1 (by rw [hAP]; trivial) fun r hr => h r (List.mem_append_right _ hr)⟩
+  completeness o env w h1 _ hW h := by
     simp only [pairMain, circuit_norm] at h
-    intro r hr
+    obtain ⟨rB, sB⟩ := B.completeness_call o env _ h1 (by rw [hAB]; trivial) hW.1 h.1
+    obtain ⟨rP, sP⟩ := P.completeness_call _ env _ h1 (by rw [hAP]; trivial) hW.2 h.2
+    refine ⟨fun r hr => ?_, sB, sP⟩
     rcases List.mem_append.1 hr with hr | hr
-    · exact B.completeness_call o env _ h1 (by rw [hB]; trivial) h.1 r hr
-    · exact P.completeness_call _ env _ h1 (by rw [hP]; trivial) h.2 r hr
+    · exact rB r hr
+    · exact rP r hr
 
 /-- The parent's independence of the private data, from the children's alone. -/
-theorem pair_indep (hB : B.Assumptions = fun _ _ => True) (hP : P.Assumptions = fun _ _ => True)
-    (iB : B.Indep) (iP : P.Indep) : (pair B P hB hP).Indep where
+theorem pair_indep (hAB : B.Assumptions = fun _ _ => True) (hAP : P.Assumptions = fun _ _ => True)
+    (iB : B.Indep) (iP : P.Indep) : (pair B P hAB hAP).Indep where
   rows w w' o := by
     show _ ++ _ = _ ++ _
     rw [iB.rows _ (w'.map Prod.fst), iB.nextOffset _ (w'.map Prod.fst),
@@ -229,7 +236,7 @@ example (hint : ProverHint F) (b : Bool) (v : F) :
         hint ([1], [])).1.tail ∧
     ((((pairTop (F := F)).formalCircuit.main (some (b, v))).operations Offset.start).compute
         hint ([1], [])).1.tail = [v] := by
-  refine ⟨pairTop.completeness hint (b, v), ?_⟩
+  refine ⟨pairTop.completeness hint (b, v) ⟨trivial, trivial⟩, ?_⟩
   simp only [pairTop, TopLevelCircuit.ofIndep, pair, pairMain, circuit_norm,
     FormalCircuit.operations_call]
   rfl
@@ -241,7 +248,7 @@ def bitTop : TopLevelCircuit F Bool Variable :=
 
 -- with no public input, the relation holds at `[]`, and only there
 example : (bitTop (F := F)).Relation [] ∧ ∀ a : F, ¬ (bitTop (F := F)).Relation [a] := by
-  refine ⟨bitTop.completeness (fun _ _ => #[]) true, fun a h => ?_⟩
+  refine ⟨bitTop.completeness (fun _ _ => #[]) true trivial, fun a h => ?_⟩
   exact absurd h.1
     (by simp [TopLevelCircuit.numInputs, bitTop, TopLevelCircuit.ofIndep, allocBit, Offset.start])
 

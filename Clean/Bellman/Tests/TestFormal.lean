@@ -13,8 +13,8 @@ Pins the gadget bundle on bellman 0.15.0 gadgets ported as bundles, over a field
 - a witness function reading the variable it allocates is not computable; one reading ONE
   is, at any offset past it;
 - `AllocatedBit::alloc` over a captured `Option` value: its rows do not depend on the value;
-- `AllocatedNum::assert_nonzero`: complete only under its assumption; at zero the computed
-  assignment violates the row;
+- `AllocatedNum::assert_nonzero`: sound on any input, complete only under its prover-side
+  assumption; at zero the computed assignment violates the row;
 - `AllocatedNum::conditionally_reverse`: sound only under its assumption (a boolean
   condition); with condition 2 the rows hold and neither order results;
 - `AllocatedNum::alloc` then `inputize`, from the whole circuit's start: the computed public
@@ -53,7 +53,7 @@ def mul : FormalCircuit F (Variable × Variable) Variable where
     simp only [List.mem_singleton, forall_eq, circuit_norm, zero_add] at h
     exact h.symm
   completeness := by
-    intro o env ab _ _ hw
+    intro o env ab _ _ _ hw
     simp only [mulMain, circuit_norm, List.append_nil, List.singleton_append] at hw
     simp only [List.mem_singleton, forall_eq, circuit_norm, zero_add]
     exact hw.symm
@@ -63,7 +63,8 @@ example : ((mul (F := ZMod 7)).computedEnv (fun _ _ => #[]) (⟨.input 1⟩, ⟨
     ⟨3, 0⟩ [1, 3, 5] []).aux 0 = 3 * 5 := by
   have hr := (mul (F := ZMod 7)).complete_computed (fun _ _ => #[]) (⟨.input 1⟩, ⟨.input 2⟩)
     ⟨3, 0⟩ [1, 3, 5] [] rfl rfl rfl ⟨show 1 < 3 by omega, show 2 < 3 by omega⟩ trivial
-  exact mul.soundness ⟨3, 0⟩ _ (⟨.input 1⟩, ⟨.input 2⟩) (by decide) trivial hr
+    trivial
+  exact mul.soundness ⟨3, 0⟩ _ (⟨.input 1⟩, ⟨.input 2⟩) (by decide) trivial hr.1
 
 /-! ## The emission lemma -/
 
@@ -124,7 +125,7 @@ def allocBit : FormalCircuit F (Option Bool) Variable where
     · right; exact (sub_eq_zero.1 h).symm
     · left; exact h
   completeness := by
-    intro o env v h1 _ h
+    intro o env v h1 _ _ h
     simp only [List.mem_cons, List.not_mem_nil, or_false, forall_eq, circuit_norm, h1] at h ⊢
     rw [h]; split <;> simp
 
@@ -137,7 +138,8 @@ example (v v' : Option Bool) (o : Offset) :
 /-! ## `AllocatedNum::assert_nonzero` -/
 
 /-- `AllocatedNum::assert_nonzero` (`num.rs:284-312`). Rust's witness function fails at zero;
-the Lean one returns `0⁻¹ = 0`, so completeness assumes a nonzero input. -/
+the Lean one returns `0⁻¹ = 0`, so completeness assumes a nonzero input, as a prover-side
+assumption: soundness holds on any input. -/
 def assertNonzero : FormalCircuit F Variable Unit where
   main v := do
     let inv ← alloc "ephemeral inverse" fun env => (env.get v)⁻¹
@@ -151,7 +153,7 @@ def assertNonzero : FormalCircuit F Variable Unit where
     rw [Variable.get_agrees hv h], trivial⟩
   output_below _ _ _ := trivial
   Spec env v _ := env.get v ≠ 0
-  Assumptions env v := env.get v ≠ 0
+  ProverAssumptions env v := env.toEnvironment.get v ≠ 0
   soundness := by
     intro o env v h1 _ h
     simp only [List.mem_cons, List.not_mem_nil, or_false, forall_eq, circuit_norm] at h ⊢
@@ -159,7 +161,7 @@ def assertNonzero : FormalCircuit F Variable Unit where
     rw [hv, h1] at h
     simp at h
   completeness := by
-    intro o env v h1 hv h
+    intro o env v h1 _ hv h
     simp only [List.mem_cons, List.not_mem_nil, or_false, forall_eq, circuit_norm] at h ⊢
     rw [h, h1]
     exact mul_inv_cancel₀ hv
@@ -170,13 +172,13 @@ example : ¬ ∀ r ∈ (assertNonzero (F := ZMod 7)).rowsAt ⟨.input 1⟩ ⟨2,
       [1, 0] []).toEnvironment := by
   decide
 
--- at 3 the assumption holds, and the computed assignment satisfies the row
+-- at 3 the prover-side assumption holds, and the computed assignment satisfies the row
 example : ∀ r ∈ (assertNonzero (F := ZMod 7)).rowsAt ⟨.input 1⟩ ⟨2, 0⟩,
     r.Holds ((assertNonzero (F := ZMod 7)).computedEnv (fun _ _ => #[]) ⟨.input 1⟩ ⟨2, 0⟩
       [1, 3] []).toEnvironment :=
-  assertNonzero.complete_computed _ _ _ [1, 3] [] rfl rfl rfl (show 1 < 2 by omega)
+  (assertNonzero.complete_computed _ _ _ [1, 3] [] rfl rfl rfl (show 1 < 2 by omega) trivial
     (show ((assertNonzero (F := ZMod 7)).computedEnv (fun _ _ => #[]) ⟨.input 1⟩ ⟨2, 0⟩
-      [1, 3] []).toEnvironment.get ⟨.input 1⟩ ≠ 0 by decide)
+      [1, 3] []).toEnvironment.get ⟨.input 1⟩ ≠ 0 by decide)).1
 
 /-! ## `AllocatedNum::conditionally_reverse` -/
 
@@ -234,7 +236,7 @@ def condReverse [DecidableEq F] :
     · simp only [h1, if_true, mul_one, sub_right_inj] at h₁ h₂ ⊢
       exact ⟨h₁.symm, h₂.symm⟩
   completeness := by
-    rintro o env ⟨a, b, cond⟩ _ hb h
+    rintro o env ⟨a, b, cond⟩ _ hb _ h
     change env.get cond = 0 ∨ env.get cond = 1 at hb
     simp only [List.mem_cons, List.not_mem_nil, or_false, forall_eq_or_imp, forall_eq,
       circuit_norm, List.cons_append, List.nil_append] at h ⊢
@@ -284,7 +286,7 @@ def pub : FormalCircuit F (Option F) (Variable × Variable) where
     simp only [List.mem_singleton, forall_eq, circuit_norm, zero_add, h1, mul_one] at h ⊢
     exact h
   completeness := by
-    intro o env _ h1 _ hw
+    intro o env _ h1 _ _ hw
     simp only [pubMain, circuit_norm, List.append_nil, List.cons_append,
       List.nil_append] at hw
     simp only [List.mem_singleton, forall_eq, circuit_norm, zero_add, h1, mul_one]
@@ -294,8 +296,8 @@ def pub : FormalCircuit F (Option F) (Variable × Variable) where
 example : ((pub (F := ZMod 7)).computedEnv (fun _ _ => #[]) (some 4) Offset.start [1] []).input 1
     = 4 := by
   have hr := (pub (F := ZMod 7)).complete_computed (fun _ _ => #[]) (some 4) Offset.start [1] []
-    rfl rfl rfl trivial trivial
-  have := pub.soundness Offset.start _ (some 4) (by decide) trivial hr
+    rfl rfl rfl trivial trivial trivial
+  have := pub.soundness Offset.start _ (some 4) (by decide) trivial hr.1
   have h0 : ((pub (F := ZMod 7)).computedEnv (fun _ _ => #[]) (some 4) Offset.start [1]
     []).aux 0 = 4 := by decide
   exact this.trans h0
