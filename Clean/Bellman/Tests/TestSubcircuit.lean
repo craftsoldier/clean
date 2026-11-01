@@ -467,9 +467,11 @@ example (o : Offset) (env : ProverEnvironment F) (v : Option Bool) (h1 : env.inp
     env.toEnvironment.get ((allocBit (F := F)).output v o) = if v.getD false then 1 else 0 :=
   ((allocBit (F := F)).completeness_call o env v h1 trivial trivial h).2
 
--- the AND's prover value is the product only on bits: on 2 and 3 the prover assigns 0, and the
--- row needs 6
-example : ¬ ((2 : ZMod 7) * 3 = if (2 : ZMod 7) = 1 ∧ (3 : ZMod 7) = 1 then 1 else 0) := by
+-- on inputs 2 and 3, which are not bits, the assignment the AND's prover computes violates its
+-- row: it assigns 0, and the row needs 6
+example : ¬ ∀ r ∈ (andBit (F := ZMod 7)).rowsAt (⟨.input 1⟩, ⟨.input 2⟩) ⟨3, 0⟩,
+    r.Holds ((andBit (F := ZMod 7)).computedEnv (fun _ _ => #[]) (⟨.input 1⟩, ⟨.input 2⟩)
+      ⟨3, 0⟩ [1, 2, 3] []).toEnvironment := by
   decide
 
 -- the assignment computed from ONE on `(true, true)` gives the parent's output 1

@@ -25,9 +25,9 @@ check itself.
 ## Soundness and completeness
 
 Soundness: public inputs in the relation satisfy the circuit's spec on an assignment with inputs
-`(1, x)`. Completeness: for any private data on which the circuit's prover-side assumptions hold,
-the public inputs the prover computes, from inputs `[1]` and no auxiliary values, are in the
-relation.
+`(1, x)`. Completeness: for any private data, given the circuit's prover-side assumptions on the
+assignment the prover computes, the public inputs it computes, from inputs `[1]` and no auxiliary
+values, are in the relation.
 
 ## Independence through calls
 
@@ -129,9 +129,9 @@ theorem soundness (x : List F) (h : self.Relation x) :
   exact ⟨aux, self.formalCircuit.soundness _ _ none rfl (by rw [self.assumptions_eq]; trivial)
     fun r hr => hrows r (List.mem_append_left _ hr)⟩
 
-/-- **Completeness.** For any private data on which the prover-side assumptions hold, the public
-inputs the prover computes, starting from inputs `[1]` and no auxiliary values
-(`prover.rs:204-206`), are in the relation. -/
+/-- **Completeness.** For any private data, given the prover-side assumptions on the assignment
+the prover computes, the public inputs it computes, starting from inputs `[1]` and no auxiliary
+values (`prover.rs:204-206`), are in the relation. -/
 theorem completeness (hint : ProverHint F) (w : W)
     (hP : self.formalCircuit.ProverAssumptions
       (self.formalCircuit.computedEnv hint (some w) Offset.start [1] []) (some w)) :
