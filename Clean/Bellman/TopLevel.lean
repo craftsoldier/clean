@@ -7,7 +7,8 @@ A top-level circuit is the circuit groth16 runs: a `FormalCircuit` over the prov
 data, captured as `Option` values as in bellman's circuit structs (`TopLevelCircuit`). Key
 generation runs it with every private value `none`, without running any witness function, so
 its rows and its next offset must not depend on that data; and no enclosing circuit supplies its
-assumptions, so it has none.
+assumptions, so it has none. Its prover-side assumptions remain, as a hypothesis of
+completeness.
 
 ## The key's rows and the relation
 
@@ -24,14 +25,15 @@ check itself.
 ## Soundness and completeness
 
 Soundness: public inputs in the relation satisfy the circuit's spec on an assignment with inputs
-`(1, x)`. Completeness: for any private data, the public inputs the prover computes, from
-inputs `[1]` and no auxiliary values, are in the relation.
+`(1, x)`. Completeness: for any private data, given the circuit's prover-side assumptions on the
+assignment the prover computes, the public inputs it computes, from inputs `[1]` and no auxiliary
+values, are in the relation.
 
 ## Independence through calls
 
 A parent built from calls cannot show by `rfl` that its rows ignore the private data: the calls
 are opaque. `FormalCircuit.Indep` states it for a gadget's closed forms, a parent proves it from
-its children's, and `TopLevelCircuit.ofIndep` makes a gadget with no assumptions top-level from
+its children's, and `TopLevelCircuit.ofIndep` makes a gadget with no `Assumptions` top-level from
 it.
 
 ## Rust references (groth16 0.2.0)
@@ -84,7 +86,7 @@ theorem extraRows_holds (env : Environment F) (n : ℕ) : ∀ r ∈ extraRows n,
 
 /-- A circuit groth16 runs: a formal circuit over the prover's private data, whose rows and next
 offset do not depend on that data, since key generation runs it with `none` and no witness
-function (`generator.rs:58-70, 187-191`), and which has no assumptions. -/
+function (`generator.rs:58-70, 187-191`), and which has no `Assumptions`. -/
 structure TopLevelCircuit (F : Type) [Ring F] (W β : Type) [HasBelow β] where
   /-- The underlying formal circuit, over the private data. -/
   formalCircuit : FormalCircuit F (Option W) β
@@ -127,9 +129,12 @@ theorem soundness (x : List F) (h : self.Relation x) :
   exact ⟨aux, self.formalCircuit.soundness _ _ none rfl (by rw [self.assumptions_eq]; trivial)
     fun r hr => hrows r (List.mem_append_left _ hr)⟩
 
-/-- **Completeness.** For any private data, the public inputs the prover computes, starting from
-inputs `[1]` and no auxiliary values (`prover.rs:204-206`), are in the relation. -/
-theorem completeness (hint : ProverHint F) (w : W) :
+/-- **Completeness.** For any private data, given the prover-side assumptions on the assignment
+the prover computes, the public inputs it computes, starting from inputs `[1]` and no auxiliary
+values (`prover.rs:204-206`), are in the relation. -/
+theorem completeness (hint : ProverHint F) (w : W)
+    (hP : self.formalCircuit.ProverAssumptions
+      (self.formalCircuit.computedEnv hint (some w) Offset.start [1] []) (some w)) :
     self.Relation
       (((self.formalCircuit.main (some w)).operations Offset.start).compute hint
         ([1], [])).1.tail := by
@@ -159,8 +164,8 @@ theorem completeness (hint : ProverHint F) (w : W) :
     intro r hr
     rcases List.mem_append.1 hr with hr | hr
     · rw [← self.rows_indep (some w)] at hr
-      exact self.formalCircuit.complete_computed hint (some w) Offset.start [1] [] rfl rfl rfl
-        trivial (by rw [self.assumptions_eq]; trivial) r hr
+      exact (self.formalCircuit.complete_computed hint (some w) Offset.start [1] [] rfl rfl rfl
+        trivial (by rw [self.assumptions_eq]; trivial) hP).1 r hr
     · exact extraRows_holds _ _ r hr
 
 end TopLevelCircuit
@@ -173,7 +178,7 @@ structure FormalCircuit.Indep {W γ : Type} [HasBelow γ] (G : FormalCircuit F (
   output : ∀ w w' o, G.output w o = G.output w' o
   nextOffset : ∀ w w' o, G.nextOffset w o = G.nextOffset w' o
 
-/-- A formal circuit with no assumptions whose closed forms do not depend on its private data is
+/-- A formal circuit with no `Assumptions` whose closed forms do not depend on its private data is
 a top-level circuit. -/
 def TopLevelCircuit.ofIndep {W β : Type} [HasBelow β] (G : FormalCircuit F (Option W) β)
     (h : G.Indep) (hA : G.Assumptions = fun _ _ => True) : TopLevelCircuit F W β where

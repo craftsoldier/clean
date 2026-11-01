@@ -4,17 +4,25 @@ import Clean.Bellman.Lemmas
 # The gadget bundle
 
 A gadget's proof boundary is a `FormalCircuit`: its circuit, closed forms of the rows, output
-and next offset it emits, what it assumes, and what its rows force (`Spec`), with soundness and
-completeness. A parent uses a gadget through these fields only.
+and next offset it emits, what it assumes, what its rows force (`Spec`), and what its honest
+prover needs and computes (`ProverAssumptions`, `ProverSpec`), with soundness and completeness.
+A parent uses a gadget through these fields only.
 
 ## Soundness and completeness
 
 Soundness: on any assignment where ONE holds `1` and the gadget's assumptions hold, if every
 row of `rowsAt` holds, so does the spec. Completeness: on an honest assignment
-(`ExtendsWitnesses`) where ONE holds `1` and the assumptions hold, every row of `rowsAt`
-holds. The assumptions are hypotheses of both, because a bellman gadget constrains only what
-its rows say: `AllocatedBit::and` constrains neither its inputs nor its output to be bits, and
-`AllocatedNum::assert_nonzero` is complete only for a nonzero input (at zero its prover fails).
+(`ExtendsWitnesses`) where ONE holds `1` and both the assumptions and the prover-side
+assumptions hold, every row of `rowsAt` holds, and so does the prover-side spec of the output.
+
+`Assumptions` are hypotheses of both, because a bellman gadget constrains only what its rows
+say and its caller supplies the rest: `AllocatedBit::alloc_conditionally` forces its result to
+be a bit only when its condition is itself a bit. `ProverAssumptions` are what completeness
+alone needs, in addition, so they do not burden soundness: `AllocatedNum::assert_nonzero` is
+sound on any input but complete only for a nonzero one (at zero its prover fails). A
+prover-side assumption that cannot hold makes completeness vacuous. `ProverSpec` states what
+the honest prover's values satisfy beyond what the rows force, so a parent's completeness can
+read a child's output value through the call without opening its operations.
 
 `FormalCircuit.constraints_bind` is the emission lemma: after any circuit, a gadget's rows are
 that circuit's rows followed by `rowsAt` at the offset it leaves.
@@ -41,7 +49,7 @@ output is allocated before the offset after it, so a parent can pass it on to an
 
 ## Rust references (bellman 0.15.0, groth16 0.2.0)
 
-- bellman `src/gadgets/boolean.rs` — `AllocatedBit::and`
+- bellman `src/gadgets/boolean.rs` — `AllocatedBit::alloc_conditionally`
 - bellman `src/gadgets/num.rs` — `AllocatedNum::assert_nonzero`
 - groth16 `src/prover.rs` — `create_proof`, `ProvingAssignment::alloc` and `alloc_input`
 -/
@@ -216,8 +224,8 @@ theorem Operations.extendsWitnesses_compute [Zero F] (hint : ProverHint F) :
 
 /-! ### The bundle -/
 
-/-- A gadget: its circuit, closed forms of what it emits, its assumptions and its spec, with
-soundness and completeness (see the module docstring). -/
+/-- A gadget: its circuit, closed forms of what it emits, its assumptions and its spec, and its
+prover-side assumptions and spec, with soundness and completeness (see the module docstring). -/
 structure FormalCircuit (F : Type) [Ring F] (α β : Type) [HasBelow α] [HasBelow β] where
   /-- The gadget's circuit, on its input. -/
   main : α → Circuit F β
@@ -237,15 +245,20 @@ structure FormalCircuit (F : Type) [Ring F] (α β : Type) [HasBelow α] [HasBel
     ((main x).operations o).ComputableWitnesses o
   /-- Its output is allocated before the offset after it. -/
   output_below : ∀ x o, HasBelow.Below x o → HasBelow.Below (output x o) (nextOffset x o)
-  /-- What it needs of its input and the assignment. -/
+  /-- What it needs of its input and the assignment, for soundness and completeness. -/
   Assumptions : Environment F → α → Prop := fun _ _ => True
   /-- What its rows force. -/
   Spec : Environment F → α → β → Prop
+  /-- What its honest prover needs besides `Assumptions`, for completeness only. -/
+  ProverAssumptions : ProverEnvironment F → α → Prop := fun _ _ => True
+  /-- What the values its honest prover computes satisfy, proved alongside its rows. -/
+  ProverSpec : ProverEnvironment F → α → β → Prop := fun _ _ _ => True
   soundness : ∀ (o : Offset) (env : Environment F) (x : α), env.input 0 = 1 →
     Assumptions env x → (∀ r ∈ rowsAt x o, r.Holds env) → Spec env x (output x o)
   completeness : ∀ (o : Offset) (env : ProverEnvironment F) (x : α), env.input 0 = 1 →
-    Assumptions env x → ExtendsWitnesses env ((main x).operations o) o →
-    ∀ r ∈ rowsAt x o, r.Holds env
+    Assumptions env x → ProverAssumptions env x →
+    ExtendsWitnesses env ((main x).operations o) o →
+    (∀ r ∈ rowsAt x o, r.Holds env) ∧ ProverSpec env x (output x o)
 
 variable [Ring F] {α β : Type} [HasBelow α] [HasBelow β]
 
@@ -266,20 +279,22 @@ def FormalCircuit.computedEnv (G : FormalCircuit F α β) (hint : ProverHint F) 
 
 /-- **Completeness on the computed assignment.** Started from values whose counts are the
 offset and whose first input is `1`, the assignment the witness functions compute satisfies
-every row, for an input allocated before the offset and given the gadget's assumptions on that
-assignment. -/
+every row and the prover-side spec, for an input allocated before the offset and given the
+gadget's assumptions and prover-side assumptions on that assignment. -/
 theorem FormalCircuit.complete_computed (G : FormalCircuit F α β) (hint : ProverHint F) (x : α)
     (o : Offset) (ins aux : List F) (hi : ins.length = o.input) (ha : aux.length = o.aux)
     (h1 : ins.head? = some 1) (hx : HasBelow.Below x o)
-    (hA : G.Assumptions (G.computedEnv hint x o ins aux).toEnvironment x) :
-    ∀ r ∈ G.rowsAt x o, r.Holds (G.computedEnv hint x o ins aux).toEnvironment := by
+    (hA : G.Assumptions (G.computedEnv hint x o ins aux).toEnvironment x)
+    (hP : G.ProverAssumptions (G.computedEnv hint x o ins aux) x) :
+    (∀ r ∈ G.rowsAt x o, r.Holds (G.computedEnv hint x o ins aux).toEnvironment) ∧
+      G.ProverSpec (G.computedEnv hint x o ins aux) x (G.output x o) := by
   obtain ⟨i₂, a₂, hs⟩ := Operations.compute_extends hint ((G.main x).operations o) ins aux
   -- ONE is the first of the values it starts from, so the offset is past it
   have hpos : 0 < o.input := by
     rw [← hi]; rcases ins with _ | _
     · simp at h1
     · simp
-  refine G.completeness _ _ x ?_ hA ?_
+  refine G.completeness _ _ x ?_ hA hP ?_
   · show (((G.main x).operations o).compute hint (ins, aux)).1[0]?.getD 0 = 1
     rw [hs]
     rcases ins with _ | ⟨a, ins⟩

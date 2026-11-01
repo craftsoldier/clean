@@ -137,12 +137,13 @@ theorem FormalCircuit.computable_call (G : FormalCircuit F α β) (x : α) (o : 
     ((G.call x).operations o).ComputableWitnesses o := by
   rw [G.operations_call]; exact G.computable x o ho hx
 
-/-- On an assignment honest for a call, where ONE holds `1` and the child's assumptions hold,
-the child's completeness gives its rows. -/
+/-- On an assignment honest for a call, where ONE holds `1` and the child's assumptions and
+prover-side assumptions hold, the child's completeness gives its rows and its prover-side
+spec. -/
 theorem FormalCircuit.completeness_call (G : FormalCircuit F α β) (o : Offset)
     (env : ProverEnvironment F) (x : α) (h1 : env.input 0 = 1) (hA : G.Assumptions env x)
-    (h : ExtendsWitnesses env ((G.call x).operations o) o) :
-    ∀ r ∈ G.rowsAt x o, r.Holds env :=
-  G.completeness o env x h1 hA (G.operations_call x o ▸ h)
+    (hP : G.ProverAssumptions env x) (h : ExtendsWitnesses env ((G.call x).operations o) o) :
+    (∀ r ∈ G.rowsAt x o, r.Holds env) ∧ G.ProverSpec env x (G.output x o) :=
+  G.completeness o env x h1 hA hP (G.operations_call x o ▸ h)
 
 end Bellman

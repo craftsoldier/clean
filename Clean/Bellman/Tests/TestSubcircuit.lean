@@ -11,7 +11,11 @@ Pins calls on parents built from bundles, each proved through its children's bun
 - `reverseByBit`, a parent bundle built from its children's bundles and one allocation: a bit
   (`AllocatedBit::alloc`), a value, and `AllocatedNum::conditionally_reverse` by the bit, each in
   its namespace; the reversal's assumption, a boolean condition, comes from the bit gadget's
-  spec, in soundness and in completeness.
+  spec, in soundness and in completeness;
+- `andBits`, two allocated bits ANDed (`AllocatedBit::and`) through calls: its prover's output is
+  the AND of the captured bits, read from the bits' prover-side specs without opening their
+  operations. The AND is sound on any inputs and takes them being bits as a prover-side
+  assumption, which the bits' prover-side specs supply.
 -/
 
 namespace Bellman.Tests.TestSubcircuit
@@ -42,14 +46,15 @@ def square : FormalCircuit F Variable Variable where
     simp only [List.mem_cons, List.not_mem_nil, or_false, forall_eq, circuit_norm] at h ⊢
     rw [← h, sq]
   completeness := by
-    intro o env v _ _ h
+    intro o env v _ _ _ h
     simp only [List.mem_cons, List.not_mem_nil, or_false, forall_eq, circuit_norm] at h ⊢
     exact h.symm
 
-/-- Call `b` twice in sequence, given that `b` raises to the power `k` and assumes nothing. -/
+/-- Call `b` twice in sequence, given that `b` raises to the power `k` and has no assumptions and
+no prover-side assumptions. -/
 def twice (b : FormalCircuit F Variable Variable) (k : ℕ)
     (hb : ∀ env v c, b.Spec env v c → env.get c = env.get v ^ k)
-    (hA : ∀ env v, b.Assumptions env v) :
+    (hA : ∀ env v, b.Assumptions env v) (hP : ∀ env v, b.ProverAssumptions env v) :
     FormalCircuit F Variable Variable where
   main v := do
     let a ← b.call v
@@ -74,12 +79,12 @@ def twice (b : FormalCircuit F Variable Variable) (k : ℕ)
     have h₂ := hb _ _ _ (b.soundness _ env _ h1 (hA _ _)
       fun r hr => h r (List.mem_append_right _ hr))
     rw [h₂, h₁, ← pow_mul]
-  completeness o env v h1 _ h := by
+  completeness o env v h1 _ _ h := by
     simp only [circuit_norm] at h
-    intro r hr
+    refine ⟨fun r hr => ?_, trivial⟩
     rcases List.mem_append.1 hr with hr | hr
-    · exact b.completeness_call o env v h1 (hA _ _) h.1 r hr
-    · exact b.completeness_call _ env _ h1 (hA _ _) h.2 r hr
+    · exact (b.completeness_call o env v h1 (hA _ _) (hP _ _) h.1).1 r hr
+    · exact (b.completeness_call _ env _ h1 (hA _ _) (hP _ _) h.2).1 r hr
 
 /-- The exponent after `d` doublings of the tree, `2 ^ 2 ^ d`, kept folded so that Lean does
 not evaluate it. -/
@@ -94,10 +99,11 @@ attribute [irreducible] ex
 /-- `2 ^ d` squaring gadgets, each level calling the one below twice. -/
 def nest : (d : ℕ) → { b : FormalCircuit F Variable Variable //
     (∀ env v c, b.Spec env v c → env.get c = env.get v ^ ex d) ∧
-      ∀ env v, b.Assumptions env v }
-  | 0 => ⟨square, fun _ _ _ h => by rw [ex_zero]; exact h, fun _ _ => trivial⟩
-  | d + 1 => ⟨twice (nest d).1 _ (nest d).2.1 (nest d).2.2,
-      fun env v c h => by rw [ex_succ]; exact h, fun _ _ => trivial⟩
+      (∀ env v, b.Assumptions env v) ∧ ∀ env v, b.ProverAssumptions env v }
+  | 0 => ⟨square, fun _ _ _ h => by rw [ex_zero]; exact h, fun _ _ => trivial,
+      fun _ _ => trivial⟩
+  | d + 1 => ⟨twice (nest d).1 _ (nest d).2.1 (nest d).2.2.1 (nest d).2.2.2,
+      fun env v c h => by rw [ex_succ]; exact h, fun _ _ => trivial, fun _ _ => trivial⟩
 
 -- soundness of 1,024 gadgets through the children's specs
 example (o : Offset) (env : Environment F) (v : Variable) (h1 : env.input 0 = 1)
@@ -105,13 +111,14 @@ example (o : Offset) (env : Environment F) (v : Variable) (h1 : env.input 0 = 1)
     env.get (((nest (F := F) 10).1.call v).output o) = env.get v ^ ex 10 := by
   rw [FormalCircuit.constraints_call] at h
   rw [FormalCircuit.output_call]
-  exact (nest 10).2.1 _ _ _ ((nest 10).1.soundness o env v h1 ((nest 10).2.2 _ _) h)
+  exact (nest 10).2.1 _ _ _ ((nest 10).1.soundness o env v h1 ((nest 10).2.2.1 _ _) h)
 
 -- the assignment computed from ONE satisfies every row of the 1,024 gadgets
 example (hint : ProverHint F) (v : Variable) (hv : v.Below Offset.start) :
     ∀ r ∈ (nest (F := F) 10).1.rowsAt v Offset.start,
       r.Holds ((nest (F := F) 10).1.computedEnv hint v Offset.start [1] []).toEnvironment :=
-  (nest 10).1.complete_computed hint v _ [1] [] rfl rfl rfl hv ((nest 10).2.2 _ _)
+  ((nest 10).1.complete_computed hint v _ [1] [] rfl rfl rfl hv ((nest 10).2.2.1 _ _)
+    ((nest 10).2.2.2 _ _)).1
 
 /-- The squaring row `a · a = c`. -/
 def sqRow (a c : Variable) : Constraint (ZMod 7) :=
@@ -136,7 +143,7 @@ example : (((nest (F := ZMod 7) 2).1.main ⟨.input 1⟩).operations ⟨2, 0⟩)
 /-! ## A parent bundle -/
 
 /-- `AllocatedBit::alloc` (`boolean.rs:70-99`): the value is captured, `none` at key
-generation. -/
+generation. The prover assigns 1 or 0 as it is `true` or not. -/
 def allocBit : FormalCircuit F (Option Bool) Variable where
   main v := do
     let a ← alloc "boolean" fun _ => if v.getD false then 1 else 0
@@ -149,6 +156,7 @@ def allocBit : FormalCircuit F (Option Bool) Variable where
   computable _ _ _ _ := ⟨fun _ _ _ => rfl, trivial⟩
   output_below _ o _ := by show o.aux < o.aux + 1; omega
   Spec env _ a := env.get a = 0 ∨ env.get a = 1
+  ProverSpec env v a := env.toEnvironment.get a = if v.getD false then 1 else 0
   soundness := by
     intro o env v h1 _ h
     simp only [List.mem_cons, List.not_mem_nil, or_false, forall_eq, circuit_norm, h1] at h ⊢
@@ -156,8 +164,9 @@ def allocBit : FormalCircuit F (Option Bool) Variable where
     · right; exact (sub_eq_zero.1 h).symm
     · left; exact h
   completeness := by
-    intro o env v h1 _ h
+    intro o env v h1 _ _ h
     simp only [List.mem_cons, List.not_mem_nil, or_false, forall_eq, circuit_norm, h1] at h ⊢
+    refine ⟨?_, h⟩
     rw [h]; split <;> simp
 
 /-- `AllocatedNum::conditionally_reverse` (`num.rs:317-357`), for a condition that is an
@@ -214,7 +223,7 @@ def condReverse [DecidableEq F] :
     · simp only [h1, if_true, mul_one, sub_right_inj] at h₁ h₂ ⊢
       exact ⟨h₁.symm, h₂.symm⟩
   completeness := by
-    rintro o env ⟨a, b, cond⟩ _ hb h
+    rintro o env ⟨a, b, cond⟩ _ hb _ h
     change env.get cond = 0 ∨ env.get cond = 1 at hb
     simp only [List.mem_cons, List.not_mem_nil, or_false, forall_eq_or_imp, forall_eq,
       circuit_norm, List.cons_append, List.nil_append] at h ⊢
@@ -300,15 +309,15 @@ def reverseByBit :
     exact ⟨hb, condReverse.soundness _ env (reverseByBitIn x o) h1 hb
       fun r hr => h r (List.mem_append_right _ hr)⟩
   completeness := by
-    intro o env x h1 _ h
+    intro o env x h1 _ _ h
     simp only [reverseByBitMain, circuit_norm, List.cons_append, List.nil_append] at h
     obtain ⟨hbit, -, hrev⟩ := h
-    have rb := allocBit.completeness_call o env _ h1 trivial hbit
+    have rb := (allocBit.completeness_call o env _ h1 trivial trivial hbit).1
     have sb := allocBit.soundness o env.toEnvironment _ h1 trivial rb
-    intro r hr
+    refine ⟨fun r hr => ?_, trivial⟩
     rcases List.mem_append.1 hr with hr | hr
     · exact rb r hr
-    · exact condReverse.completeness_call _ env _ h1 sb hrev r hr
+    · exact (condReverse.completeness_call _ env _ h1 sb trivial hrev).1 r hr
 
 -- the parent's spec, read: the bit is a bit and the pair is reversed by it
 example (o : Offset) (env : Environment F) (x : Variable × Option (F × Bool))
@@ -327,10 +336,148 @@ def envS : ProverEnvironment (ZMod 7) :=
 -- calls with `operations_call`, since the kernel does not reduce through them
 example : (∀ r ∈ (reverseByBit (F := ZMod 7)).rowsAt (⟨.input 1⟩, some (5, true))
       ⟨2, 0⟩, r.Holds envS.toEnvironment) ∧ envS.aux 2 = 5 ∧ envS.aux 3 = 3 := by
-  refine ⟨reverseByBit.complete_computed _ _ _ [1, 3] [] rfl rfl rfl
-    ⟨show 1 < 2 by omega, trivial⟩ trivial, ?_⟩
+  refine ⟨(reverseByBit.complete_computed _ _ _ [1, 3] [] rfl rfl rfl
+    ⟨show 1 < 2 by omega, trivial⟩ trivial trivial).1, ?_⟩
   simp only [envS, FormalCircuit.computedEnv, reverseByBit, reverseByBitMain, circuit_norm,
     FormalCircuit.operations_call, FormalCircuit.output_call, FormalCircuit.nextOffset_call]
   decide
+
+/-! ## A parent reading its children's values -/
+
+/-- `AllocatedBit::and` (`boolean.rs:155-190`): `a · b = c`. The prover assigns 1 when both
+inputs are 1 and 0 otherwise, the product only on bits, so completeness assumes both are bits;
+the row forces the product on any inputs. -/
+def andBit : FormalCircuit F (Variable × Variable) Variable where
+  main ab := do
+    let c ← alloc "and result" fun env =>
+      if env.toEnvironment.get ab.1 = 1 ∧ env.toEnvironment.get ab.2 = 1 then 1 else 0
+    enforce "and constraint" (· + ab.1) (· + ab.2) (· + c)
+    pure c
+  rowsAt ab o := [⟨(LinearCombination.zero : LinearCombination F) + ab.1,
+    (LinearCombination.zero : LinearCombination F) + ab.2,
+    (LinearCombination.zero : LinearCombination F) + (⟨.aux o.aux⟩ : Variable)⟩]
+  output _ o := ⟨.aux o.aux⟩
+  nextOffset _ o := { o with aux := o.aux + 1 }
+  computable ab o _ h := ⟨fun e e' he => by
+    show (if _ then _ else _) = (if _ then _ else _)
+    rw [Variable.get_agrees h.1 he, Variable.get_agrees h.2 he], trivial⟩
+  output_below _ o _ := by show o.aux < o.aux + 1; omega
+  Spec env ab c := env.get c = env.get ab.1 * env.get ab.2
+  ProverAssumptions env ab :=
+    (env.toEnvironment.get ab.1 = 0 ∨ env.toEnvironment.get ab.1 = 1) ∧
+    (env.toEnvironment.get ab.2 = 0 ∨ env.toEnvironment.get ab.2 = 1)
+  soundness := by
+    intro o env ab _ _ h
+    simp only [List.mem_singleton, forall_eq, circuit_norm, zero_add] at h ⊢
+    exact h.symm
+  completeness := by
+    rintro o env ⟨a, b⟩ _ _ ⟨ha, hb⟩ hw
+    simp only [circuit_norm, List.append_nil, List.singleton_append] at hw
+    simp only [List.mem_singleton, forall_eq, circuit_norm, zero_add]
+    rw [hw]
+    rcases ha with ha | ha <;> rcases hb with hb | hb <;> simp [ha, hb]
+
+/-- Two captured bits, allocated, then their AND, each through a call. -/
+def andBitsMain (w : Option (Bool × Bool)) : Circuit F Variable := do
+  let a ← allocBit.call (w.map Prod.fst)
+  let b ← allocBit.call (w.map Prod.snd)
+  andBit.call (a, b)
+
+/-- The AND's input: the two bits. -/
+def andBitsIn (w : Option (Bool × Bool)) (o : Offset) : Variable × Variable :=
+  ((allocBit (F := F)).output (w.map Prod.fst) o,
+    (allocBit (F := F)).output (w.map Prod.snd)
+      ((allocBit (F := F)).nextOffset (w.map Prod.fst) o))
+
+/-- The offset after the two bits. -/
+def andBitsAt (w : Option (Bool × Bool)) (o : Offset) : Offset :=
+  (allocBit (F := F)).nextOffset (w.map Prod.snd)
+    ((allocBit (F := F)).nextOffset (w.map Prod.fst) o)
+
+omit [DecidableEq F] in
+theorem andBitsIn_below (w : Option (Bool × Bool)) (o : Offset) :
+    HasBelow.Below (andBitsIn (F := F) w o) (andBitsAt (F := F) w o) := by
+  have hle := (allocBit (F := F)).le_nextOffset (w.map Prod.snd)
+    ((allocBit (F := F)).nextOffset (w.map Prod.fst) o)
+  exact ⟨HasBelow.mono ((allocBit (F := F)).output_below _ o trivial) hle.1 hle.2,
+    (allocBit (F := F)).output_below _ _ trivial⟩
+
+/-- The AND of two captured bits: its rows force a bit, and its prover's value is the AND of the
+captured values, read from the bits' prover-side specs. -/
+def andBits : FormalCircuit F (Option (Bool × Bool)) Variable where
+  main := andBitsMain
+  rowsAt w o := allocBit.rowsAt (w.map Prod.fst) o ++
+    allocBit.rowsAt (w.map Prod.snd) (allocBit.nextOffset (w.map Prod.fst) o) ++
+    andBit.rowsAt (andBitsIn w o) (andBitsAt w o)
+  rowsAt_eq w o := by simp only [andBitsMain, circuit_norm, List.append_assoc]; rfl
+  output w o := andBit.output (andBitsIn w o) (andBitsAt w o)
+  output_eq w o := by simp only [andBitsMain, circuit_norm]; rfl
+  nextOffset w o := andBit.nextOffset (andBitsIn w o) (andBitsAt w o)
+  nextOffset_eq w o := by simp only [andBitsMain, circuit_norm]; rfl
+  advance_eq w o := by simp only [andBitsMain, circuit_norm]; rfl
+  computable w o ho _ := by
+    simp only [andBitsMain, circuit_norm]
+    -- the bits allocate no input, so the AND starts past ONE too
+    exact ⟨allocBit.computable_call _ o ho trivial, allocBit.computable_call _ _ ho trivial,
+      andBit.computable_call _ _ ho (andBitsIn_below w o)⟩
+  output_below w o _ := andBit.output_below _ _ (andBitsIn_below w o)
+  Spec env _ c := env.get c = 0 ∨ env.get c = 1
+  ProverSpec env w c := env.toEnvironment.get c =
+    if (w.map Prod.fst).getD false && (w.map Prod.snd).getD false then 1 else 0
+  soundness := by
+    intro o env w h1 _ h
+    simp only [List.mem_append] at h
+    have ha := allocBit.soundness o env _ h1 trivial fun r hr => h r (.inl (.inl hr))
+    have hb := allocBit.soundness _ env _ h1 trivial fun r hr => h r (.inl (.inr hr))
+    have hc := andBit.soundness _ env (andBitsIn w o) h1 trivial fun r hr => h r (.inr hr)
+    change env.get _ = env.get (andBitsIn w o).1 * env.get (andBitsIn w o).2 at hc
+    rw [hc]
+    rcases ha with ha | ha <;> rcases hb with hb | hb <;>
+      simp only [andBitsIn] at ha hb ⊢ <;> simp [ha, hb]
+  completeness := by
+    intro o env w h1 _ _ h
+    simp only [andBitsMain, circuit_norm] at h
+    obtain ⟨ra, va⟩ := allocBit.completeness_call o env _ h1 trivial trivial h.1
+    obtain ⟨rb, vb⟩ := allocBit.completeness_call _ env _ h1 trivial trivial h.2.1
+    -- each bit's value is 0 or 1, as its prover-side spec gives it: the AND's prover-side
+    -- assumption
+    have bit : ∀ (t : Bool) (x : F), x = (if t then 1 else 0) → x = 0 ∨ x = 1 := by
+      intro t x hx; cases t <;> simp [hx]
+    -- the AND's offset is passed as `andBitsAt`, so that `hc` below names it as the output does
+    obtain ⟨rc, -⟩ := andBit.completeness_call (andBitsAt w o) env (andBitsIn w o) h1 trivial
+      ⟨bit _ _ va, bit _ _ vb⟩ h.2.2
+    have hc := andBit.soundness (andBitsAt w o) env.toEnvironment (andBitsIn w o) h1 trivial rc
+    refine ⟨fun r hr => ?_, ?_⟩
+    · rcases List.mem_append.1 hr with hr | hr
+      · rcases List.mem_append.1 hr with hr | hr
+        · exact ra r hr
+        · exact rb r hr
+      · exact rc r hr
+    · change env.toEnvironment.get _ =
+        env.toEnvironment.get (andBitsIn w o).1 * env.toEnvironment.get (andBitsIn w o).2 at hc
+      show env.toEnvironment.get (andBit.output (andBitsIn w o) (andBitsAt w o)) = _
+      rw [hc]
+      simp only [andBitsIn] at va vb ⊢
+      rw [va, vb]
+      cases (w.map Prod.fst).getD false <;> cases (w.map Prod.snd).getD false <;> simp
+
+-- through a call, a bit's value is the captured one, from its prover-side spec
+example (o : Offset) (env : ProverEnvironment F) (v : Option Bool) (h1 : env.input 0 = 1)
+    (h : ExtendsWitnesses env (((allocBit (F := F)).call v).operations o) o) :
+    env.toEnvironment.get ((allocBit (F := F)).output v o) = if v.getD false then 1 else 0 :=
+  ((allocBit (F := F)).completeness_call o env v h1 trivial trivial h).2
+
+-- on inputs 2 and 3, which are not bits, the assignment the AND's prover computes violates its
+-- row: it assigns 0, and the row needs 6
+example : ¬ ∀ r ∈ (andBit (F := ZMod 7)).rowsAt (⟨.input 1⟩, ⟨.input 2⟩) ⟨3, 0⟩,
+    r.Holds ((andBit (F := ZMod 7)).computedEnv (fun _ _ => #[]) (⟨.input 1⟩, ⟨.input 2⟩)
+      ⟨3, 0⟩ [1, 2, 3] []).toEnvironment := by
+  decide
+
+-- the assignment computed from ONE on `(true, true)` gives the parent's output 1
+example : ((andBits (F := ZMod 7)).computedEnv (fun _ _ => #[]) (some (true, true)) ⟨1, 0⟩
+    [1] []).toEnvironment.get ((andBits (F := ZMod 7)).output (some (true, true)) ⟨1, 0⟩) = 1 :=
+  ((andBits (F := ZMod 7)).complete_computed (fun _ _ => #[]) (some (true, true)) ⟨1, 0⟩ [1] []
+    rfl rfl rfl trivial trivial trivial).2
 
 end Bellman.Tests.TestSubcircuit
