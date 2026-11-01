@@ -1,11 +1,7 @@
-module
-
-public import Clean.Utils.Bitwise
-public import Clean.Utils.Vector
-public import Mathlib.Data.Nat.Bitwise
-public import Clean.Utils.Bits
-
-@[expose] public section
+import Clean.Utils.Bitwise
+import Clean.Utils.Vector
+import Mathlib.Data.Nat.Bitwise
+import Clean.Utils.Bits
 
 namespace Utils.Rotation
 open Bits (toBits toBits_injective)
@@ -39,7 +35,7 @@ lemma mod_shiftLeft_eq_shiftLeft_mod_pow (x o N : ℕ) (ho_lt : o < N) :
   Our definition of right rotation of a 64-bit integer is equal to
   the one provided by `BitVec.rotateRight`
 -/
-theorem rotRight64_eq_bv_rotate (x : ℕ) (h : x < 2^64) (offset : ℕ) :
+def rotRight64_eq_bv_rotate (x : ℕ) (h : x < 2^64) (offset : ℕ) :
     rotRight64 x offset = (x.toUInt64.toBitVec.rotateRight offset).toNat := by
   simp only [rotRight64]
   simp only [BitVec.toNat_rotateRight]
@@ -223,7 +219,7 @@ theorem rotRight64_composition (x n m : ℕ) (h : x < 2^64) :
   Our definition of right rotation of a 32-bit integer is equal to
   the one provided by `BitVec.rotateRight`
 -/
-theorem rotRight32_eq_bv_rotate (x : ℕ) (h : x < 2^32) (offset : ℕ) :
+def rotRight32_eq_bv_rotate (x : ℕ) (h : x < 2^32) (offset : ℕ) :
     rotRight32 x offset = (x.toUInt32.toBitVec.rotateRight offset).toNat := by
   simp only [rotRight32]
   simp only [BitVec.toNat_rotateRight]

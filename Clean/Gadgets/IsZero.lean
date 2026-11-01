@@ -1,14 +1,10 @@
-module
-
-public import Clean.Circuit.Basic
-public import Clean.Circuit.Provable
-public import Clean.Circuit.Theorems
-public import Clean.Circuit.Loops
-public import Clean.Gadgets.IsZeroField
-public import Clean.Utils.Field
-public import Clean.Utils.Tactics
-
-@[expose] public section
+import Clean.Circuit.Basic
+import Clean.Circuit.Provable
+import Clean.Circuit.Theorems
+import Clean.Circuit.Loops
+import Clean.Gadgets.IsZeroField
+import Clean.Utils.Field
+import Clean.Utils.Tactics
 
 namespace Gadgets.IsZero
 

@@ -1,11 +1,7 @@
-module
-
-public import Clean.Gadgets.SHA256.SHA256Round
-public import Clean.Gadgets.SHA256.SHA256Schedule
-public import Clean.Gadgets.SHA256.Add32
-public import Clean.Specs.SHA256
-
-@[expose] public section
+import Clean.Gadgets.SHA256.SHA256Round
+import Clean.Gadgets.SHA256.SHA256Schedule
+import Clean.Gadgets.SHA256.Add32
+import Clean.Specs.SHA256
 
 section
 variable {p : ℕ} [Fact p.Prime] [Fact (p > 2^33)]
@@ -189,7 +185,8 @@ private lemma sha256Compress_eq_valStateAfterRound
             (Specs.SHA256.K[i.val]'(by have := i.isLt; omega)).toNat
             (input_schedule[i.val]'(by have := i.isLt; omega))) input_state =
         valStateAfterRound input_state input_schedule k by
-    exact h 64 (le_refl 64)
+    have := h 64 (le_refl 64)
+    convert this using 1
   intro k hk
   induction k with
   | zero => simp [valStateAfterRound, Fin.foldl_zero]
@@ -357,10 +354,6 @@ end SHA256Rounds
 /-!
 ## FormalCircuit for full block compression (messageSchedule + 64 rounds + Davies-Meyer)
 -/
-
--- Lean 4.33 exposes `Fin.foldl` during reduction. Keep the concrete 48-step fold in
--- the value-level schedule specification opaque to the generic circuit simp pass.
-attribute [local irreducible] Specs.SHA256.messageSchedule
 
 namespace CompressBlock
 

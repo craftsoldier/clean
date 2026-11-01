@@ -1,11 +1,7 @@
 /-
 Miscellaneous utility lemmas/methods that don't fit anywhere else.
 -/
-module
-
-public import Mathlib.Data.Fin.Basic
-
-@[expose] public section
+import Mathlib.Data.Fin.Basic
 variable {α : Type}
 
 theorem cast_apply {α β β' : Type} (h : β = β') (f : α → β) (x : α) :

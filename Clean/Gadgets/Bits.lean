@@ -1,11 +1,7 @@
-module
-
-public import Clean.Gadgets.Equality
-public import Clean.Gadgets.Boolean
-public import Clean.Utils.Bits
-public import Clean.Utils.Tactics
-
-@[expose] public section
+import Clean.Gadgets.Equality
+import Clean.Gadgets.Boolean
+import Clean.Utils.Bits
+import Clean.Utils.Tactics
 
 namespace Gadgets.ToBits
 open Utils.Bits
@@ -13,7 +9,7 @@ variable {p : ℕ} [prime: Fact p.Prime] [p_large_enough: Fact (p > 2)]
 
 def main (n : ℕ) (x : Expression (F p)) : Circuit (F p) (Vector (Expression (F p)) n) := do
   -- witness the bits of `x`
-  let bits ← witnessVector n (x.bits n)
+  let bits ← witnessVector n (.range n fun i => ((x.val >>> i) % 2).toField)
 
   -- add boolean constraints on all bits
   Circuit.forEach bits assertBool

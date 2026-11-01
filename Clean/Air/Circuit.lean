@@ -1,12 +1,8 @@
 /-
 Shared circuit infrastructure for Clean.Air.
 -/
-module
-
-public import Clean.Circuit
-public import Clean.Circuit.Extensions
-
-@[expose] public section
+import Clean.Circuit
+import Clean.Circuit.Extensions
 
 variable {F : Type} [FiniteField F]
 variable {Input Output : TypeMap} [ProvableType Input] [ProvableType Output]

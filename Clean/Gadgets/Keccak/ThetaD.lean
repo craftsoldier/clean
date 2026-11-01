@@ -1,11 +1,7 @@
-module
-
-public import Clean.Gadgets.Xor.Xor64
-public import Clean.Gadgets.Keccak.KeccakState
-public import Clean.Gadgets.Rotation64.Rotation64
-public import Clean.Specs.Keccak256
-
-@[expose] public section
+import Clean.Gadgets.Xor.Xor64
+import Clean.Gadgets.Keccak.KeccakState
+import Clean.Gadgets.Rotation64.Rotation64
+import Clean.Specs.Keccak256
 
 namespace Gadgets.Keccak256.ThetaD
 variable {p : ℕ} [Fact p.Prime] [p_large_enough: Fact (p > 2^16 + 2^8)]

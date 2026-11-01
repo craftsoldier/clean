@@ -1,11 +1,7 @@
-module
-
-public import Clean.Types.U64
-public import Clean.Circuit.Provable
-public import Clean.Utils.Field
-public import Clean.Specs.Keccak256
-
-@[expose] public section
+import Clean.Types.U64
+import Clean.Circuit.Provable
+import Clean.Utils.Field
+import Clean.Specs.Keccak256
 
 namespace Gadgets.Keccak256
 open Specs.Keccak256
@@ -38,8 +34,7 @@ def KeccakBlock.value (block : KeccakBlock (F p)) := block.map U64.value
 
 -- lemmas
 
-omit [Fact (Nat.Prime p)] p_large_enough in
-theorem KeccakRow.normalized_iff (row : KeccakRow (F p)) :
+def KeccakRow.normalized_iff (row : KeccakRow (F p)) :
     row.Normalized ↔
     row[0].Normalized ∧
     row[1].Normalized ∧

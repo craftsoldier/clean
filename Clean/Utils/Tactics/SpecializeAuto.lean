@@ -1,9 +1,5 @@
-module
-
-public meta import Lean.Elab.Tactic
-public meta import Lean.Elab.Exception
-
-public meta section
+import Lean.Elab.Tactic
+import Lean.Elab.Exception
 
 open Lean.Elab.Tactic
 open Lean.Meta

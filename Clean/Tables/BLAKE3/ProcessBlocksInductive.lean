@@ -4,17 +4,13 @@ This table has exactly 17 rows:
 - Rows 0-15: Process up to 16 blocks (64 bytes each)
 - Row 16: Final output containing the result of processBlocks
 -/
-module
-
-public import Clean.Table.Inductive
-public import Clean.Circuit.Loops
-public import Clean.Gadgets.BLAKE3.Compress
-public import Clean.Specs.BLAKE3
-public import Clean.Gadgets.Addition32.Addition32
-public import Clean.Gadgets.Conditional
-public import Clean.Gadgets.IsZero
-
-@[expose] public section
+import Clean.Table.Inductive
+import Clean.Circuit.Loops
+import Clean.Gadgets.BLAKE3.Compress
+import Clean.Specs.BLAKE3
+import Clean.Gadgets.Addition32.Addition32
+import Clean.Gadgets.Conditional
+import Clean.Gadgets.IsZero
 
 namespace Tables.BLAKE3.ProcessBlocksInductive
 open Gadgets
@@ -78,11 +74,17 @@ def circuit : FormalAssertion (F p) ProcessBlocksState where
 
   soundness := by
     circuit_proof_start [ProcessBlocksState.Normalized, U32.AssertNormalized.circuit]
-    simp_all [← h_input, eval_vector] -- provable_vector_simp wanted
+    simp_all [← h_input, eval_vector]
 
   completeness := by
-    circuit_proof_all [U32.AssertNormalized.circuit, ProcessBlocksState.Normalized,
-      getElem_eval_vector] -- provable_vector_simp wanted
+    circuit_proof_start [U32.AssertNormalized.circuit, getElem_eval_vector] -- provable_vector_simp wanted
+    simp only [ProcessBlocksState.Normalized] at h_spec
+    constructor
+    · rintro ⟨i, h_i⟩
+      rcases h_spec with ⟨h_spec, _⟩
+      specialize h_spec ⟨ i, h_i ⟩
+      convert h_spec
+    simp_all
 
 end BLAKE3ProcessBlocksStateNormalized
 
@@ -240,6 +242,10 @@ lemma soundness : InductiveTable.Soundness (F p) ProcessBlocksState BlockInput S
     have h_addition := h_holds.2.2.2.2.1
     have h_cv_cond := h_holds.2.2.2.2.2.1
     have h_blocks_cond := h_holds.2.2.2.2.2.2
+    -- On 4.30, `fromComponents` projections no longer reduce during `simp` matching,
+    -- so resolve the Conditional spec by definitional equality instead.
+    replace h_cv_cond : _ = Vector.takeShort _ 8 step._proof_2 :=
+      (h_cv_cond (Or.inr rfl)).trans (if_pos rfl)
     simp only [ProcessBlocksState.Normalized] at h_state_norm
     simp only [BlockInput.Normalized] at h_input_norm
     specialize h_compress (by
@@ -309,7 +315,7 @@ lemma soundness : InductiveTable.Soundness (F p) ProcessBlocksState BlockInput S
         simp only [Vector.getElem_takeShort]
         rfl
     constructor
-    · exact takeShort8_normalized (by norm_num) h_compress_norm
+    · exact takeShort8_normalized step._proof_2 h_compress_norm
     constructor
     · exact h_state_norm.2.1
     change ({ x0 := env.get 5553, x1 := env.get 5555, x2 := env.get 5557, x3 := env.get 5559 } : U32 (F p)).Normalized
@@ -323,7 +329,10 @@ lemma soundness : InductiveTable.Soundness (F p) ProcessBlocksState BlockInput S
       | inr _ => contradiction
     simp only [x_block_exists_zero] at *
     simp only [circuit_norm] at h_holds ⊢
-    simp only [circuit_norm, h_holds, ProcessBlocksState.toChunkState] at ⊢ spec_previous
+    -- Same 4.30 workaround: resolve the chaining-value Conditional spec definitionally.
+    have h_cv_eq : _ = acc_chaining_value :=
+      (h_holds.2.2.2.2.2.1 (Or.inl rfl)).trans (if_neg (by exact zero_ne_one))
+    simp only [circuit_norm, h_holds, h_cv_eq, ProcessBlocksState.toChunkState] at ⊢ spec_previous
     norm_num at h_holds ⊢
     simp_all only [circuit_norm]
     omega
@@ -403,7 +412,9 @@ lemma completeness : InductiveTable.Completeness (F p) ProcessBlocksState BlockI
             simp [ZMod.val_zero]
         · norm_num)
       simp_all [circuit_norm]
-    trivial
+    -- 4.30: `(fromComponents _).selector` no longer reduces for `assumption`/`trivial`;
+    -- provide the boolean fact by definitional unfolding instead.
+    exact ⟨h_input.1, trivial⟩
 
 /--
 The InductiveTable for processBlocks.

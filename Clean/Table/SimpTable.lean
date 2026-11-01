@@ -1,13 +1,7 @@
-module
-
-public import Mathlib.Init
-public meta import Lean.Meta.Tactic.Simp.SimpTheorems
-public import Lean.Meta.Tactic.Simp.SimpTheorems
-public meta import Lean.Meta.Tactic.Simp.RegisterCommand
-public import Lean.Meta.Tactic.Simp.RegisterCommand
-public import Lean.LabelAttribute
-
-public meta section
+import Mathlib.Init
+import Lean.Meta.Tactic.Simp.SimpTheorems
+import Lean.Meta.Tactic.Simp.RegisterCommand
+import Lean.LabelAttribute
 
 register_simp_attr table_norm
 register_simp_attr table_assignment_norm

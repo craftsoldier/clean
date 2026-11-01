@@ -1,10 +1,6 @@
-module
-
-public import Clean.Circuit
-public import Clean.Utils.Bits
-public import Clean.Circomlib.CompConstant
-
-@[expose] public section
+import Clean.Circuit
+import Clean.Utils.Bits
+import Clean.Circomlib.CompConstant
 
 /-
 Original source code:

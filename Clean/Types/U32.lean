@@ -1,14 +1,10 @@
-module
-
-public import Clean.Gadgets.ByteLookup
-public import Clean.Circuit.Extensions
-public import Clean.Utils.Bitwise
-public import Clean.Circuit.Provable
-public import Clean.Utils.Primes
-public import Clean.Circuit.Subcircuit
-public import Clean.Gadgets.Equality
-
-@[expose] public section
+import Clean.Gadgets.ByteLookup
+import Clean.Circuit.Extensions
+import Clean.Utils.Bitwise
+import Clean.Circuit.Provable
+import Clean.Utils.Primes
+import Clean.Circuit.Subcircuit
+import Clean.Gadgets.Equality
 
 section
 variable {p : ℕ} [Fact p.Prime] [p_large_enough: Fact (p > 512)]
@@ -270,10 +266,11 @@ open Gadgets (ByteTable)
   This means that all its limbs are less than 256.
 -/
 def main (inputs : Var U32 (F p)) : Circuit (F p) Unit := do
-  lookup ByteTable inputs.x0
-  lookup ByteTable inputs.x1
-  lookup ByteTable inputs.x2
-  lookup ByteTable inputs.x3
+  let ⟨ x0, x1, x2, x3 ⟩ := inputs
+  lookup ByteTable x0
+  lookup ByteTable x1
+  lookup ByteTable x2
+  lookup ByteTable x3
 
 def circuit : FormalAssertion (F p) U32 where
   main
@@ -281,13 +278,11 @@ def circuit : FormalAssertion (F p) U32 where
   Spec inputs := inputs.Normalized
 
   soundness := by
-    -- destructure `x_var` up front: `simp` does not iota-reduce the `match` coming from
-    -- `main`'s destructuring `let` against an opaque variable
-    rintro i0 env ⟨ x0_var, x1_var, x2_var, x3_var ⟩ ⟨ x0, x1, x2, x3 ⟩ h_eval _as
+    rintro i0 env x_var ⟨ x0, x1, x2, x3 ⟩ h_eval _as
     simp_all [main, circuit_norm, ByteTable, Normalized, explicit_provable_type]
 
   completeness := by
-    rintro i0 env ⟨ x0_var, x1_var, x2_var, x3_var ⟩ _ ⟨ x0, x1, x2, x3 ⟩ h_eval _as
+    rintro i0 env x_var _ ⟨ x0, x1, x2, x3 ⟩ h_eval _as
     simp_all [main, circuit_norm, ByteTable, Normalized, explicit_provable_type]
 
 end U32.AssertNormalized
@@ -393,13 +388,8 @@ lemma or_componentwise {x y : U32 (F p)} (x_norm : x.Normalized) (y_norm : y.Nor
     (x.x0.val ||| y.x0.val) + 256 *
       ((x.x1.val ||| y.x1.val) + 256 *
         ((x.x2.val ||| y.x2.val) + 256 * (x.x3.val ||| y.x3.val))) := by
-  have bitwise_or (a b : ℕ) : Nat.bitwise or a b = a ||| b := by
-    apply Nat.eq_of_testBit_eq
-    intro i
-    simp only [Nat.testBit_bitwise (f := or) (by rfl), Nat.testBit_or]
-  have h := bitwise_componentwise or x_norm y_norm (by rfl)
-  simp only [bitwise_or] at h
-  exact h
+  show Nat.bitwise _ _ _ = _
+  rw [bitwise_componentwise or x_norm y_norm] <;> rfl
 
 end Bitwise
 

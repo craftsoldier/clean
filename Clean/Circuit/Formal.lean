@@ -1,8 +1,4 @@
-module
-
-public import Clean.Circuit.Explicit
-
-@[expose] public section
+import Clean.Circuit.Explicit
 
 variable {F : Type} [FiniteField F] {α β : Type} {n : ℕ}
 
@@ -22,16 +18,6 @@ elab "unfold_formal_circuit_consts" : tactic => do
       catch _ =>
         pure ()
 
-open Lean Meta Elab Tactic in
-/-- Preserve a default proof's declared target even if its tactic script unfolds that target.
-Lean 4.33 checks the resulting auto-parameter proof at implicit transparency downstream. -/
-elab "preserve_tactic_target" : tactic => withMainContext do
-  let goal ← getMainGoal
-  let target ← goal.getType
-  let subgoal ← mkFreshExprMVar target
-  goal.assign (← mkAppOptM ``id #[target, subgoal])
-  replaceMainGoal [subgoal.mvarId!]
-
 @[explicit_circuit_unfold_type]
 structure FormalCircuitBase (F : Type) (Input Output : TypeMap)
     [FiniteField F] [CircuitType Input] [CircuitType Output] where
@@ -44,7 +30,6 @@ structure FormalCircuitBase (F : Type) (Input Output : TypeMap)
   exposedChannels : Var Input F → ℕ → List (ExposedChannel F) := fun _ _ => []
   exposedChannels_eq : ∀ input offset,
     ((main input).operations offset).ExposedChannelsLawful (exposedChannels input offset) := by
-    preserve_tactic_target
     try dsimp only [main]
     simp only [circuit_norm, seval]
     try first | ac_rfl | trivial | tauto
@@ -61,7 +46,6 @@ structure FormalCircuitBase (F : Type) (Input Output : TypeMap)
   requirementsChannelsLawful : ∀ input offset,
     ((main input).operations offset).RequirementsChannelsLawful
       elaborated.channelsWithGuarantees channelsWithRequirements := by
-    preserve_tactic_target
     try dsimp only [main]
     simp only [circuit_norm, seval]
     try (unfold_formal_circuit_consts; simp only [circuit_norm, seval])
@@ -93,24 +77,6 @@ def output (self : FormalCircuitBase F Input Output) (input : Var Input F) (offs
     (FormalCircuitBase.mk name main elaborated exposedChannels exposedChannels_eq
       channelsWithRequirements requirementsChannelsLawful).output input offset =
     elaborated.output input offset := rfl
-
-open Lean Meta Simp in
-/-- Reduce `FormalCircuitBase.output` on record constructors without asking the
-simplifier to unify the constructor's dependent proof fields. -/
-private meta def outputSimproc (e : Expr) : SimpM Simp.Step := do
-  unless e.isAppOfArity ``FormalCircuitBase.output 9 do return .continue
-  let args := e.getAppArgs
-  let self := args[6]!
-  unless self.isAppOfArity ``FormalCircuitBase.mk 13 do return .continue
-  let selfArgs := self.getAppArgs
-  let outputProj := mkProj ``ElaboratedCircuit 2 selfArgs[8]!
-  let some outputFn ← withTransparency .none <| reduceProj? outputProj
-    | return .continue
-  let rhs := mkAppN outputFn #[args[7]!, args[8]!]
-  return .done { expr := rhs, proof? := none }
-
-simproc outputReduce (FormalCircuitBase.output _ _ _) := outputSimproc
-attribute [circuit_norm] outputReduce
 
 @[explicit_circuit_norm]
 def localLength (self : FormalCircuitBase F Input Output) (input : Var Input F) : ℕ :=
@@ -394,13 +360,13 @@ def GeneralFormalCircuit.toWithHint {F : Type} [FiniteField F] {Input Output : T
   ProverAssumptions input data hint := circuit.ProverAssumptions input data hint
   ProverSpec input output hint := circuit.ProverSpec input output hint
   soundness := by
-    simp only [GeneralFormalCircuit.WithHint.Soundness,
-      CircuitType.value_of_provableType]
-    exact circuit.soundness
+    simpa only [GeneralFormalCircuit.WithHint.Soundness,
+      CircuitType.eval_verifier, CircuitType.value_of_provableType]
+      using circuit.soundness
   completeness := by
-    simp only [GeneralFormalCircuit.WithHint.Completeness,
-      CircuitType.proverValue_of_provableType]
-    exact circuit.completeness
+    simpa only [GeneralFormalCircuit.WithHint.Completeness,
+      CircuitType.eval_prover, CircuitType.proverValue_of_provableType]
+      using circuit.completeness
 
 @[circuit_norm]
 def GeneralFormalCircuit.channels (circuit : GeneralFormalCircuit F Input Output) :=

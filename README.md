@@ -9,22 +9,19 @@
 
 `clean` is an embedded Lean DSL for writing zk circuits, targeting popular arithmetizations like AIR, PLONK and R1CS.
 
-**Check out the [Clean Website](https://clean.zksecurity.xyz) for more information**
+**Check out our blog post for an introduction: https://blog.zksecurity.xyz/posts/clean**
 
-## Development
+`clean` is developed by [zkSecurity](https://zksecurity.xyz/), currently as part of a Verified-zkEVM grant.
 
-The `clean` framework is developed by [zkSecurity](https://zksecurity.xyz/), currently funded by the Verified-zkEVM grant.
+We intend to build out `clean` into a universal zk framework that produces **formally verified, bug-free circuits** for the entire ecosystem. See the [roadmap](#roadmap).
 
 ## Community
 
-The [Clean website](https://clean.zksecurity.xyz) explains how *anyone* can get started with Clean.
+Public Telegram group to discuss `clean`: [t.me/clean_zk](https://t.me/clean_zk)
 
-If you have questions, or want to contribute,
-please join our Public Telegram group [t.me/clean_zk](https://t.me/clean_zk).
-We are happy to answer any questions or just discuss!
+Please join if you want to use `clean`, or contribute, or if you have any questions!
 
-We love contributors!
-Check out our [good first issues](https://github.com/Verified-zkEVM/clean/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22good%20first%20issue%22).
+We always welcome contributors! Check out our [good first issues](https://github.com/Verified-zkEVM/clean/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22good%20first%20issue%22).
 
 ## Using the repo
 
@@ -40,10 +37,15 @@ After that, we recommend open the repo in VSCode to get immediate inline feedbac
 
 Make sure to install the `lean4` extension for VSCode!
 
+## Documentation
+
+We are actively working on creating proper documentation for `clean`. In the meantime, we recommend checking out our [AI-generated DeepWiki](https://deepwiki.com/Verified-zkEVM/clean).
+
+⚠️ **Disclaimer:** The wiki may contain inaccuracies or outdated details. Please take all information with a grain of salt until the official documentation is released.
+
 ## Code Style
 
-We follow standard Lean/Mathlib conventions with some local variations.
-See [doc/conventions.md](doc/conventions.md) for details.
+We follow standard Lean/Mathlib conventions with some local variations. See [doc/conventions.md](doc/conventions.md) for details.
 
 ## Proof Finding Guide
 

@@ -8,13 +8,7 @@ Constants are in PoseidonConstants.lean.
 This is intended for circuit formalization where structure matching simplifies proofs.
 For mathematical reasoning, use the simpler Poseidon.lean spec.
 -/
-module
-
-public import Clean.Specs.Poseidon
-
-public meta import Clean.Specs.Poseidon
-
-@[expose] public section
+import Clean.Specs.Poseidon
 
 namespace Specs.PoseidonOptimized
 

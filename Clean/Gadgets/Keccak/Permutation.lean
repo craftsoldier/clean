@@ -1,10 +1,6 @@
-module
-
-public import Batteries.Data.Fin.Fold
-public import Clean.Gadgets.Keccak.KeccakRound
-public import Clean.Specs.Keccak256
-
-@[expose] public section
+import Batteries.Data.Fin.Fold
+import Clean.Gadgets.Keccak.KeccakRound
+import Clean.Specs.Keccak256
 
 namespace Gadgets.Keccak256.Permutation
 variable {p : ℕ} [Fact p.Prime] [Fact (p > 2^16 + 2^8)]

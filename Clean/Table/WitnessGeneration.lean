@@ -1,8 +1,4 @@
-module
-
-public import Clean.Table.Basic
-
-@[expose] public section
+import Clean.Table.Basic
 
 variable {F : Type} {S : Type → Type} {W : ℕ+} [ProvableType S] [FiniteField F]
 

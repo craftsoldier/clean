@@ -1,5 +1,4 @@
 /.lake
-.DS_Store
 .vscode
 .codex
 backends/plonky3/target

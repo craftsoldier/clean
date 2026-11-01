@@ -1,13 +1,9 @@
-module
-
-public import Clean.Types.U32
-public import Clean.Circuit.Subcircuit
-public import Clean.Gadgets.Rotation32.Theorems
-public import Clean.Gadgets.Rotation32.Rotation32Bytes
-public import Clean.Gadgets.ByteDecomposition.ByteDecomposition
-public import Clean.Circuit.Provable
-
-@[expose] public section
+import Clean.Types.U32
+import Clean.Circuit.Subcircuit
+import Clean.Gadgets.Rotation32.Theorems
+import Clean.Gadgets.Rotation32.Rotation32Bytes
+import Clean.Gadgets.ByteDecomposition.ByteDecomposition
+import Clean.Circuit.Provable
 
 namespace Gadgets.Rotation32Bits
 variable {p : ℕ} [Fact p.Prime]
