@@ -4,14 +4,15 @@ import Mathlib.Data.ZMod.Defs
 /-!
 Pins top-level circuits, from a private value to the relation on public inputs:
 
-- a square: a private `x`, the public input `y = x · x` and the row `x · x = y`. The key's rows
-  are that row and one appended row for each of ONE and `y`; the relation forces `y` to be a
-  square, so over `ZMod 7` it rejects `[3]`, and it rejects the wrong number of inputs; the
-  prover's public inputs are in it and are `[x · x]`;
+- a square: a private `x`, the public input `y = x · x` and the row `x · x = y`, with the
+  statement that `y` is the square of the private witness. The key's rows are that row and one
+  appended row for each of ONE and `y`; an assignment satisfying them has `y = aux 0 ^ 2`, so over
+  `ZMod 7` the relation rejects `[3]`, and it rejects the wrong number of inputs; the prover's
+  public inputs are in it and are `[x · x]`, and its private value is `x`;
 - a parent built from calls: a private bit (`AllocatedBit::alloc`), then a private value made
   public (`AllocatedNum::alloc`, `inputize`), made top-level from the children's independence
-  alone, with the children's prover-side assumptions and specs as its own. The relation forces
-  the bit to be boolean and the public input to be the value, and the prover's public input is
+  alone, with the children's prover-side assumptions and specs as its own. Its statement: the
+  private bit is boolean and the public input is the private value. The prover's public input is
   the value;
 - a circuit with no public inputs: the relation holds exactly at `[]`.
 -/
@@ -25,70 +26,99 @@ variable {F : Type} [Field F]
 
 /-! ## A square -/
 
-def squareMain (w : Option F) : Circuit F Variable := do
+/-- One public field element. -/
+structure Single (F : Type) where
+  y : F
+
+instance : ProvableType Single where
+  size := 1
+  toElements p := #v[p.y]
+  fromElements v := ⟨v[0]⟩
+  toElements_fromElements v := by
+    rw [Vector.ext_iff]; intro i hi
+    obtain rfl : i = 0 := by omega
+    rfl
+  fromElements_toElements _ := rfl
+
+def squareMain (w : Option F) : Circuit F (Variable × Variable) := do
   let x ← alloc "x" fun _ => w.getD 0
   let y ← allocInput "y" fun env => env.toEnvironment.get x * env.toEnvironment.get x
   enforce "square" (· + x) (· + x) (· + y)
-  pure y
+  pure (x, y)
 
-/-- A private `x`, the public input `y = x · x`, and the row `x · x = y`. -/
-def square : FormalCircuit F (Option F) Variable where
+/-- A private `x`, the public input `y = x · x`, and the row `x · x = y`. The output names both,
+so that the statement can read the private one. -/
+def square : FormalCircuit F (Option F) (Variable × Variable) where
   main := squareMain
   rowsAt _ o := [⟨(LinearCombination.zero : LinearCombination F) + (⟨.aux o.aux⟩ : Variable),
     (LinearCombination.zero : LinearCombination F) + (⟨.aux o.aux⟩ : Variable),
     (LinearCombination.zero : LinearCombination F) + (⟨.input o.input⟩ : Variable)⟩]
-  output _ o := ⟨.input o.input⟩
+  output _ o := (⟨.aux o.aux⟩, ⟨.input o.input⟩)
   nextOffset _ o := ⟨o.input + 1, o.aux + 1⟩
   computable _ o _ _ := ⟨fun _ _ _ => rfl, fun e e' he => by
     have hx := Variable.get_agrees (v := ⟨.aux o.aux⟩) (o := ⟨o.input, o.aux + 1⟩)
       (show o.aux < o.aux + 1 by omega) he
     simp only [hx], trivial⟩
-  output_below _ o _ := by show o.input < o.input + 1; omega
-  Spec env _ y := ∃ x : F, env.get y = x ^ 2
+  output_below _ o _ := ⟨show o.aux < o.aux + 1 by omega, show o.input < o.input + 1 by omega⟩
+  Spec env _ xy := env.get xy.2 = env.get xy.1 ^ 2
+  ProverSpec env w xy := env.toEnvironment.get xy.1 = w.getD 0
   soundness := by
     intro o env w _ _ h
     simp only [List.mem_singleton, forall_eq, circuit_norm, zero_add] at h
-    exact ⟨env.aux o.aux, by show env.input o.input = _; rw [← h, pow_two]⟩
+    show env.input o.input = env.aux o.aux ^ 2
+    rw [← h, pow_two]
   completeness := by
     intro o env w _ _ _ hw
     simp only [squareMain, circuit_norm, List.append_nil, List.singleton_append] at hw
     simp only [List.mem_singleton, forall_eq, circuit_norm, zero_add]
-    exact hw.2.symm
+    exact ⟨hw.2.symm, hw.1⟩
 
-def squareTop : TopLevelCircuit F F Variable :=
-  .ofIndep square ⟨fun _ _ _ => rfl, fun _ _ _ => rfl, fun _ _ _ => rfl⟩ rfl
+def squareTop : TopLevelCircuit F F (Variable × Variable) Single where
+  formalCircuit := square
+  rows_indep _ _ := rfl
+  nextOffset_indep _ _ := rfl
+  assumptions_eq := rfl
+  numInputs_eq := rfl
+  PrivateWitness := F
+  extractPrivate env := env.aux 0
+  Spec p x := p.y = x ^ 2
+  spec_of _ h := h
 
 -- the key's rows: the circuit's one row, then one appended row for each of ONE and `y`
 example : ((squareTop (F := ZMod 7)).formalCircuit.rowsAt none Offset.start).length = 1 ∧
     (squareTop (F := ZMod 7)).numInputs = 2 ∧ (squareTop (F := ZMod 7)).keyRows.length = 3 := by
   decide
 
--- public inputs `[y]` in the relation make `y` a square
-example (y : F) (h : (squareTop (F := F)).Relation [y]) : ∃ x : F, y = x ^ 2 := by
-  obtain ⟨aux, x, hx⟩ := squareTop.soundness [y] h
-  exact ⟨x, hx⟩
+-- an assignment with inputs `(1, y)` satisfying the key's rows has `y` the square of the private
+-- witness it holds
+example (y : F) (aux : ℕ → F)
+    (h : ∀ r ∈ (squareTop (F := F)).keyRows, r.Holds (withPublic [y] aux)) : y = aux 0 ^ 2 :=
+  squareTop.soundness [y] aux h
 
 -- over `ZMod 7`, 3 is not a square, so `[3]` is not in the relation
 example : ¬ (squareTop (F := ZMod 7)).Relation [3] := by
   intro h
-  obtain ⟨aux, x, hx⟩ := squareTop.soundness [3] h
-  revert hx; change (3 : ZMod 7) = x ^ 2 → False; revert x; decide
+  have h' : ∃ x : ZMod 7, (3 : ZMod 7) = x ^ 2 :=
+    (squareTop (F := ZMod 7)).statement_soundness [3] h
+  obtain ⟨x, hx⟩ := h'
+  revert hx; revert x; decide
 
 -- the wrong number of public inputs is not in the relation
 example (a b : F) :
     ¬ (squareTop (F := F)).Relation [] ∧ ¬ (squareTop (F := F)).Relation [a, b] := by
   refine ⟨fun h => ?_, fun h => ?_⟩ <;> exact absurd h.1
-    (by simp [TopLevelCircuit.numInputs, squareTop, TopLevelCircuit.ofIndep, square,
-      Offset.start])
+    (by simp [TopLevelCircuit.numInputs, squareTop, square, Offset.start])
 
--- the prover's public inputs are in the relation, and are `[x · x]`
+-- the prover's public inputs are in the relation and are `[x · x]`, and its private value is `x`
 example (hint : ProverHint F) (x : F) :
     (squareTop (F := F)).Relation
       ((((squareTop (F := F)).formalCircuit.main (some x)).operations Offset.start).compute hint
         ([1], [])).1.tail ∧
     ((((squareTop (F := F)).formalCircuit.main (some x)).operations Offset.start).compute hint
-        ([1], [])).1.tail = [x * x] :=
-  ⟨squareTop.completeness hint x trivial, rfl⟩
+        ([1], [])).1.tail = [x * x] ∧
+    ((squareTop (F := F)).formalCircuit.computedEnv hint (some x) Offset.start [1] []).aux 0
+      = x :=
+  ⟨(squareTop.completeness hint x trivial).1, rfl, (squareTop.completeness hint x trivial).2⟩
 
 /-! ## A parent built from calls -/
 
@@ -212,21 +242,33 @@ theorem pair_indep (hAB : B.Assumptions = fun _ _ => True) (hAP : P.Assumptions 
 
 end Pair
 
-def pairTop : TopLevelCircuit F (Bool × F) (Variable × (Variable × Variable)) :=
-  .ofIndep (pair allocBit pub rfl rfl)
-    (pair_indep allocBit pub rfl rfl ⟨fun _ _ _ => rfl, fun _ _ _ => rfl, fun _ _ _ => rfl⟩
-      ⟨fun _ _ _ => rfl, fun _ _ _ => rfl, fun _ _ _ => rfl⟩) rfl
+/-- The parent's independence, from the children's. -/
+theorem pairBitPub_indep : (pair (F := F) allocBit pub rfl rfl).Indep :=
+  pair_indep allocBit pub rfl rfl ⟨fun _ _ _ => rfl, fun _ _ _ => rfl, fun _ _ _ => rfl⟩
+    ⟨fun _ _ _ => rfl, fun _ _ _ => rfl, fun _ _ _ => rfl⟩
+
+def pairTop : TopLevelCircuit F (Bool × F) (Variable × (Variable × Variable)) Single where
+  formalCircuit := pair allocBit pub rfl rfl
+  rows_indep w o := pairBitPub_indep.rows w none o
+  nextOffset_indep w o := pairBitPub_indep.nextOffset w none o
+  assumptions_eq := rfl
+  numInputs_eq := rfl
+  PrivateWitness := F × F
+  extractPrivate env := (env.aux 0, env.aux 1)
+  Spec p bv := (bv.1 = 0 ∨ bv.1 = 1) ∧ p.y = bv.2
+  spec_of _ h := h
 
 -- the key's rows: the two children's rows, then one appended row for each of ONE and the value
 example : ((pairTop (F := ZMod 7)).formalCircuit.rowsAt none Offset.start).length = 2 ∧
     (pairTop (F := ZMod 7)).numInputs = 2 ∧ (pairTop (F := ZMod 7)).keyRows.length = 4 := by
   decide
 
--- public inputs `[y]` in the relation: the bit (aux 0) is boolean, and `y` is the value (aux 1)
-example (y : F) (h : (pairTop (F := F)).Relation [y]) :
-    ∃ aux : ℕ → F, (aux 0 = 0 ∨ aux 0 = 1) ∧ y = aux 1 := by
-  obtain ⟨aux, hb, hp⟩ := pairTop.soundness [y] h
-  exact ⟨aux, hb, hp⟩
+-- an assignment with inputs `(1, y)` satisfying the key's rows: the bit (aux 0) is boolean, and
+-- `y` is the value (aux 1)
+example (y : F) (aux : ℕ → F)
+    (h : ∀ r ∈ (pairTop (F := F)).keyRows, r.Holds (withPublic [y] aux)) :
+    (aux 0 = 0 ∨ aux 0 = 1) ∧ y = aux 1 :=
+  pairTop.soundness [y] aux h
 
 -- for every private bit and value, the prover's public inputs are in the relation, and are the
 -- value
@@ -236,20 +278,29 @@ example (hint : ProverHint F) (b : Bool) (v : F) :
         hint ([1], [])).1.tail ∧
     ((((pairTop (F := F)).formalCircuit.main (some (b, v))).operations Offset.start).compute
         hint ([1], [])).1.tail = [v] := by
-  refine ⟨pairTop.completeness hint (b, v) ⟨trivial, trivial⟩, ?_⟩
-  simp only [pairTop, TopLevelCircuit.ofIndep, pair, pairMain, circuit_norm,
-    FormalCircuit.operations_call]
+  refine ⟨(pairTop.completeness hint (b, v) ⟨trivial, trivial⟩).1, ?_⟩
+  simp only [pairTop, pair, pairMain, circuit_norm, FormalCircuit.operations_call]
   rfl
 
 /-! ## No public inputs -/
 
-def bitTop : TopLevelCircuit F Bool Variable :=
-  .ofIndep allocBit ⟨fun _ _ _ => rfl, fun _ _ _ => rfl, fun _ _ _ => rfl⟩ rfl
+/-- A private bit, with no public input (`unit`): the statement is that some private value is a
+bit. -/
+def bitTop : TopLevelCircuit F Bool Variable unit where
+  formalCircuit := allocBit
+  rows_indep _ _ := rfl
+  nextOffset_indep _ _ := rfl
+  assumptions_eq := rfl
+  numInputs_eq := rfl
+  PrivateWitness := F
+  extractPrivate env := env.aux 0
+  Spec _ b := b = 0 ∨ b = 1
+  spec_of _ h := h
 
 -- with no public input, the relation holds at `[]`, and only there
 example : (bitTop (F := F)).Relation [] ∧ ∀ a : F, ¬ (bitTop (F := F)).Relation [a] := by
-  refine ⟨bitTop.completeness (fun _ _ => #[]) true trivial, fun a h => ?_⟩
+  refine ⟨(bitTop.completeness (fun _ _ => #[]) true trivial).1, fun a h => ?_⟩
   exact absurd h.1
-    (by simp [TopLevelCircuit.numInputs, bitTop, TopLevelCircuit.ofIndep, allocBit, Offset.start])
+    (by simp [TopLevelCircuit.numInputs, bitTop, allocBit, Offset.start])
 
 end Bellman.Tests.TestTopLevel
