@@ -1,11 +1,7 @@
-module
-
-public import Clean.Specs.Keccak256
-public import Clean.Gadgets.Keccak.ThetaC
-public import Clean.Gadgets.Keccak.ThetaD
-public import Clean.Gadgets.Keccak.ThetaXor
-
-@[expose] public section
+import Clean.Specs.Keccak256
+import Clean.Gadgets.Keccak.ThetaC
+import Clean.Gadgets.Keccak.ThetaD
+import Clean.Gadgets.Keccak.ThetaXor
 
 namespace Gadgets.Keccak256.Theta
 variable {p : ℕ} [Fact p.Prime] [p_large_enough: Fact (p > 2^16 + 2^8)]

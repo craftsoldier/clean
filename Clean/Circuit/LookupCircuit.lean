@@ -1,9 +1,5 @@
-module
-
-public import Clean.Circuit.Subcircuit
-public import Clean.Circuit.Foundations
-
-@[expose] public section
+import Clean.Circuit.Subcircuit
+import Clean.Circuit.Foundations
 
 /--
 A `LookupCircuit` is a circuit that can be used to instantiate a lookup table.

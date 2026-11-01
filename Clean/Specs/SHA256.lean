@@ -1,14 +1,5 @@
-module
-
-public import Clean.Utils.Bitwise
-public import Clean.Utils.Vector
-
--- `native_decide` below runs `rotRight32` and `Vector.mapFinRange`, so their compiled code must
--- also be reachable from meta execution.
-public meta import Clean.Utils.Bitwise
-public meta import Clean.Utils.Vector
-
-@[expose] public section
+import Clean.Utils.Bitwise
+import Clean.Utils.Vector
 
 namespace Specs.SHA256
 

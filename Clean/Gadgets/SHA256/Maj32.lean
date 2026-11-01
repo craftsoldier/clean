@@ -1,9 +1,5 @@
-module
-
-public import Clean.Gadgets.SHA256.BitwiseOps
-public import Clean.Specs.SHA256
-
-@[expose] public section
+import Clean.Gadgets.SHA256.BitwiseOps
+import Clean.Specs.SHA256
 
 section
 variable {p : ℕ} [Fact p.Prime]
@@ -244,10 +240,14 @@ theorem soundness : Soundness (F p) main Assumptions Spec := by
 
 theorem completeness : Completeness (F p) main Assumptions := by
   circuit_proof_start [maj32]
-  simp only [circuit_norm, Fin.isLt, reduceDIte] at h_env
+  simp only [Fin.isLt, reduceDIte] at h_env
   refine ⟨fun i => ?_, fun i => ?_⟩
-  · rw [h_env.1 i]; ring
-  · rw [h_env.2.1 i]; ring
+  · have := (h_env.1) i
+    simp only [circuit_norm] at this
+    rw [this]; ring
+  · have := (h_env.2.1) i
+    simp only [circuit_norm] at this
+    rw [this]; ring
 
 def circuit : FormalCircuit (F p) Inputs (fields 32) where
   main; elaborated; Assumptions; Spec; soundness; completeness

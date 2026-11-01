@@ -1,9 +1,5 @@
-module
-
-public import Clean.Circuit.Basic
-public import Clean.Utils.Field
-
-@[expose] public section
+import Clean.Circuit.Basic
+import Clean.Utils.Field
 
 namespace Gadgets
 variable {p : ℕ} [Fact (p ≠ 0)] [Fact p.Prime]

@@ -1,13 +1,6 @@
-module
-
-public import Std.Tactic.BVDecide
-public import Mathlib.Analysis.Normed.Ring.Lemmas
-public import Clean.Utils.Field
-public import Mathlib.Data.Nat.Bitwise
-public import Std.Tactic.BVDecide
-public meta import Std.Tactic.BVDecide.Reflect
-
-@[expose] public section
+import Mathlib.Analysis.Normed.Ring.Lemmas
+import Clean.Utils.Field
+import Mathlib.Data.Nat.Bitwise
 def not64 (a : ℕ) : ℕ := a ^^^ 0xffffffffffffffff
 
 def add32 (a b : ℕ) : ℕ := (a + b) % 2^32
@@ -60,16 +53,12 @@ theorem xor_eq_add {x : ℕ} (n : ℕ) (hx : x < 2^n) (y : ℕ) : x + 2^n * y = 
     simp [this]
 
 theorem and_mul_two_pow {x y n : ℕ} : 2 ^ n * (x &&& y) =  2 ^ n * x &&&  2 ^ n * y := by
-  apply Nat.eq_of_testBit_eq
-  intro i
-  simp only [Nat.testBit_two_pow_mul, Nat.testBit_and]
-  by_cases h : n ≤ i <;> simp [h]
+  simp only [mul_comm]
+  exact Nat.bitwise_mul_two_pow
 
 theorem xor_mul_two_pow {x y n : ℕ} : 2 ^ n * (x ^^^ y) =  2 ^ n * x ^^^  2 ^ n * y := by
-  apply Nat.eq_of_testBit_eq
-  intro i
-  simp only [Nat.testBit_two_pow_mul, Nat.testBit_xor]
-  by_cases h : n ≤ i <;> simp [h]
+  simp only [mul_comm]
+  exact Nat.bitwise_mul_two_pow
 
 lemma and_mul_two_pow_lt {n : ℕ} {x : ℕ} (hx : x < 2^n) (y : ℕ) : x &&& 2^n * y = 0 := by
   apply Nat.eq_of_testBit_eq
@@ -109,7 +98,11 @@ theorem not64_eq_sub {x : ℕ} (x_lt : x < 2^64) :
 /-- For binary values, 0 is the absorbing element for `&&&` -/
 theorem and_zero_absorb (a : ℕ) :
     0 &&& a = 0 := by
-  exact Nat.zero_and a
+  -- 0 &&& a = Nat.land 0 a = 0
+  simp only [HAnd.hAnd, AndOp.and]
+  -- land 0 a = 0
+  simp only [Nat.land]
+  apply Nat.bitwise_zero_left
 
 /-- For binary values, 1 is the identity element for `&&&` -/
 theorem and_one_id_binary (a : ℕ) (ha : a = 0 ∨ a = 1) :

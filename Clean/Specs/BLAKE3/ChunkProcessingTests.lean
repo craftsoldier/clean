@@ -1,11 +1,4 @@
-module
-
-public import Clean.Specs.BLAKE3
-
--- `native_decide` runs compiled code from this module.
-public meta import Clean.Specs.BLAKE3
-
-@[expose] public section
+import Clean.Specs.BLAKE3
 
 namespace Specs.BLAKE3.ChunkProcessing.Tests
 
@@ -38,7 +31,7 @@ example :
     let state1 := processBlockWords state testBlock64Words
     let state2 := processBlockWords state1 testBlock64Words
     startFlag state = chunkStart ∧ startFlag state1 = 0 ∧ startFlag state2 = 0 := by
-  native_decide
+  decide
 
 -- Test chunk with partial final block (65 bytes = 1 full block + 1 byte)
 def testChunk65 : List ℕ := List.range 65
@@ -62,7 +55,7 @@ example :
     words[1] = 0x00000005 ∧
     -- Rest are zeros
     words[2] = 0 := by
-  native_decide
+  decide
 
 -- Test vectors from Python reference implementation
 -- These ensure our implementation matches the reference

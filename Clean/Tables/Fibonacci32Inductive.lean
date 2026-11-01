@@ -1,10 +1,6 @@
 /- Simple Fibonacci example using `InductiveTable` -/
-module
-
-public import Clean.Table.Inductive
-public import Clean.Gadgets.Addition32.Addition32
-
-@[expose] public section
+import Clean.Table.Inductive
+import Clean.Gadgets.Addition32.Addition32
 
 namespace Tables.Fibonacci32Inductive
 open Gadgets

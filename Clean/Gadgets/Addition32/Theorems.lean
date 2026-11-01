@@ -1,11 +1,7 @@
-module
-
-public import Clean.Gadgets.Addition8.Addition8FullCarry
-public import Clean.Types.U32
-public import Clean.Utils.Field
-public import Clean.Gadgets.Boolean
-
-@[expose] public section
+import Clean.Gadgets.Addition8.Addition8FullCarry
+import Clean.Types.U32
+import Clean.Utils.Field
+import Clean.Gadgets.Boolean
 
 variable {p : ℕ} [Fact p.Prime]
 variable [p_large_enough: Fact (p > 512)]

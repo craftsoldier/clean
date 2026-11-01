@@ -1,10 +1,6 @@
-module
-
-public meta import Lean
-public meta import Clean.Circuit.Formal
-public meta import Clean.Utils.Tactics.ProvableStructSimp
-
-public meta section
+import Lean
+import Clean.Circuit.Formal
+import Clean.Utils.Tactics.ProvableStructSimp
 
 open Lean Elab Tactic Meta
 open Circuit
@@ -134,7 +130,7 @@ elab_rules : tactic
   evalTactic (← `(tactic| try dsimp +instances only [$(mkIdent `elaborated):ident] at *)) -- sometimes `main` is hidden behind `elaborated`
   evalTactic (← `(tactic| try dsimp +instances only [$(mkIdent `main):ident] at *))
 
-  -- needed because struct-var destructuring would time out on `(ElaboratedCircuit.WithData ...).output` like terms
+  -- needed because `decompose_provable_struct` would time out on `(ElaboratedCircuit.WithData ...).output` like terms
   try (evalTactic (← `(tactic| dsimp only [ElaboratedCircuit.withData, ElaboratedCircuit.output]))) catch _ => pure ()
 
   -- collapse the `field`/`id` type synonym everywhere, so that hypotheses and goals
@@ -156,8 +152,7 @@ elab_rules : tactic
 
   try (evalTactic (← `(tactic| simp +instances only [circuit_norm, $lemmasArray,*] at $(mkIdent `h_input):ident))) catch _ => pure ()
   try (evalTactic (← `(tactic| simp +instances only [circuit_norm, $lemmasArray,*] at $(mkIdent `h_assumptions):ident))) catch _ => pure ()
-  try (evalTactic (← `(tactic| simp +instances only [circuit_norm,
-    $(mkIdent `h_input):ident, $lemmasArray,*] at $(mkIdent `h_holds):ident))) catch _ => pure ()
+  try (evalTactic (← `(tactic| simp +instances only [circuit_norm, $(mkIdent `h_input):ident, $lemmasArray,*] at $(mkIdent `h_holds):ident))) catch _ => pure ()
   try (evalTactic (← `(tactic| simp +instances only [circuit_norm, $(mkIdent `h_input):ident, $lemmasArray,*] at $(mkIdent `h_env):ident))) catch _ => pure ()
   try (evalTactic (← `(tactic| simp +instances only [circuit_norm, $(mkIdent `h_input):ident, $lemmasArray,*]))) catch _ => pure ()
   try (evalTactic (← `(tactic| simp +instances only [circuit_norm, $lemmasArray,*] at $(mkIdent `h_spec):ident))) catch _ => pure ()

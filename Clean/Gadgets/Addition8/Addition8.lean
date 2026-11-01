@@ -1,9 +1,5 @@
-module
-
-public import Clean.Gadgets.Addition8.Addition8FullCarry
-public import Clean.Gadgets.Boolean
-
-@[expose] public section
+import Clean.Gadgets.Addition8.Addition8FullCarry
+import Clean.Gadgets.Boolean
 
 namespace Gadgets
 variable {p : ℕ} [Fact p.Prime] [Fact (p > 512)]

@@ -1,9 +1,5 @@
 /- This file contains miscellaneous additions and helpers on top of the Circuit DSL -/
-module
-
-public import Clean.Circuit.Subcircuit
-
-@[expose] public section
+import Clean.Circuit.Subcircuit
 
 variable {F : Type} [FiniteField F] {M : TypeMap} [ProvableType M]
 
@@ -34,7 +30,7 @@ theorem eval_varFromOffset_valueFromOffset (M : TypeMap) [ProvableType M] (offse
 
 def witnessAny (M: TypeMap) [ProvableType M] : Circuit F (Var M F) := do
   let offset ← getOffset
-  witnessIR M (.ir [] (.envRange offset))
+  witnessIR M (.ir [] (.range (size M) fun i => .envGet (offset + i)))
 
 theorem witnessAny_localWitnesses (n : ℕ) (env : ProverEnvironment F) :
     env.UsesLocalWitnessesCompleteness n (witnessAny M |>.operations n) ↔ True := by

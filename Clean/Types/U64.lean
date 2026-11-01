@@ -1,13 +1,9 @@
-module
-
-public import Clean.Gadgets.ByteLookup
-public import Clean.Utils.Bitwise
-public import Clean.Circuit.Provable
-public import Clean.Utils.Primes
-public import Clean.Circuit.Subcircuit
-public import Clean.Gadgets.Equality
-
-@[expose] public section
+import Clean.Gadgets.ByteLookup
+import Clean.Utils.Bitwise
+import Clean.Circuit.Provable
+import Clean.Utils.Primes
+import Clean.Circuit.Subcircuit
+import Clean.Gadgets.Equality
 
 section
 variable {p : ℕ} [Fact p.Prime] [p_large_enough: Fact (p > 512)]
@@ -190,14 +186,15 @@ open Gadgets (ByteTable)
   This means that all its limbs are less than 256.
 -/
 def main (inputs : Var U64 (F p)) : Circuit (F p) Unit := do
-  lookup ByteTable inputs.x0
-  lookup ByteTable inputs.x1
-  lookup ByteTable inputs.x2
-  lookup ByteTable inputs.x3
-  lookup ByteTable inputs.x4
-  lookup ByteTable inputs.x5
-  lookup ByteTable inputs.x6
-  lookup ByteTable inputs.x7
+  let ⟨x0, x1, x2, x3, x4, x5, x6, x7⟩ := inputs
+  lookup ByteTable x0
+  lookup ByteTable x1
+  lookup ByteTable x2
+  lookup ByteTable x3
+  lookup ByteTable x4
+  lookup ByteTable x5
+  lookup ByteTable x6
+  lookup ByteTable x7
 
 def circuit : FormalAssertion (F p) U64 where
   main
@@ -206,14 +203,12 @@ def circuit : FormalAssertion (F p) U64 where
   Spec inputs := inputs.Normalized
 
   soundness := by
-    -- destructure `x_var` up front: `simp` does not iota-reduce the `match` coming from
-    -- `main`'s destructuring `let` against an opaque variable
-    rintro i0 env ⟨x0_var, x1_var, x2_var, x3_var, x4_var, x5_var, x6_var, x7_var⟩
+    rintro i0 env x_var
     rintro ⟨x0, x1, x2, x3, x4, x5, x6, x7⟩ h_eval _as
     simp_all [circuit_norm, main, ByteTable, Normalized, explicit_provable_type]
 
   completeness := by
-    rintro i0 env ⟨x0_var, x1_var, x2_var, x3_var, x4_var, x5_var, x6_var, x7_var⟩ _hint
+    rintro i0 env x_var _hint
     rintro _ ⟨x0, x1, x2, x3, x4, x5, x6, x7⟩ h_eval _as
     simp_all [circuit_norm, main, ByteTable, Normalized, explicit_provable_type]
 

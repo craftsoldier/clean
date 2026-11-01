@@ -1,12 +1,8 @@
 /- Simple Keccak example using `InductiveTable` -/
-module
-
-public import Clean.Table.Inductive
-public import Clean.Circuit.Extensions
-public import Clean.Gadgets.Keccak.AbsorbBlock
-public import Clean.Specs.Keccak256
-
-@[expose] public section
+import Clean.Table.Inductive
+import Clean.Circuit.Extensions
+import Clean.Gadgets.Keccak.AbsorbBlock
+import Clean.Specs.Keccak256
 open Specs.Keccak256
 variable {p : ℕ} [Fact p.Prime] [Fact (p > 2 ^ 16 + 2 ^ 8)]
 

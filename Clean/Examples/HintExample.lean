@@ -7,13 +7,9 @@ and constrains it to be boolean.
 
 `andBool` uses `witnessBool` as a subcircuit.
 -/
-module
-
-public import Clean.Circuit
-public import Clean.Gadgets.Boolean
-public import Clean.Types.U32
-
-@[expose] public section
+import Clean.Circuit
+import Clean.Gadgets.Boolean
+import Clean.Types.U32
 
 variable {p : ℕ} [Fact p.Prime] [Fact (p > 2)]
 
@@ -50,12 +46,12 @@ deriving ProvableStruct
   internally from its inputs and passes it to `witnessBool`.
 -/
 def booleanAnd : FormalCircuit (F p) Input field where
-  main input := do
+  main | ⟨x, y⟩ => do
     -- Use witnessBool as a subcircuit with a hint synthesized from the inputs
     let z ← witnessBool <| unconstrainedBool do
-      return (input.x =? 1) &&& (input.y =? 1)
+      return (x =? 1) &&& (y =? 1)
     -- Constrain result = x * y (multiplication is AND for booleans)
-    z === input.x * input.y
+    z === x * y
     return z
 
   Assumptions | ⟨x, y⟩ => IsBool x ∧ IsBool y

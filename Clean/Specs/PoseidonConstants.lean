@@ -7,11 +7,7 @@ https://github.com/iden3/circomlib/blob/master/circuits/poseidon.circom
 The constants are from:
 https://github.com/iden3/circomlib/blob/master/circuits/poseidon_constants.circom
 -/
-module
-
-public import Mathlib.Data.ZMod.Basic
-
-@[expose] public section
+import Mathlib.Data.ZMod.Basic
 
 namespace Specs.Poseidon
 /-

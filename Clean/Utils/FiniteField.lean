@@ -11,12 +11,8 @@ range checks, and size-dependent reasoning.
 
 Part of issue #154: Generalize prime field assumption to cover binary fields.
 -/
-module
-
-public import Mathlib.Algebra.Field.ZMod
-public import Clean.Utils.Field
-
-@[expose] public section
+import Mathlib.Algebra.Field.ZMod
+import Clean.Utils.Field
 
 /--
 `FiniteField` extends `Field` with a canonical embedding into `ℕ` and finiteness.
@@ -59,12 +55,6 @@ theorem fromNat_val (x : F) : fromNat (val x) = x :=
 /-- The field has at least two elements (derived from `val_lt` and `val_one`). -/
 theorem fieldSize_pos : FiniteField.size F > 1 := by
   have := val_lt (1 : F); rwa [val_one] at this
-
-@[simp, circuit_norm] theorem fromNat_zero : (fromNat 0 : F) = 0 :=
-  val_injective (by rw [val_fromNat 0 (by have := fieldSize_pos (F := F); omega), val_zero])
-
-@[simp, circuit_norm] theorem fromNat_one : (fromNat 1 : F) = 1 :=
-  val_injective (by rw [val_fromNat 1 fieldSize_pos, val_one])
 
 /-- Two field elements are equal iff their values are equal. -/
 theorem ext {x y : F} (h : val x = val y) : x = y :=

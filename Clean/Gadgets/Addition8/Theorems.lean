@@ -1,9 +1,5 @@
-module
-
-public import Clean.Utils.Field
-public import Clean.Gadgets.Boolean
-
-@[expose] public section
+import Clean.Utils.Field
+import Clean.Gadgets.Boolean
 
 namespace Gadgets.Addition8.Theorems
 variable {p : ℕ} [Fact p.Prime]

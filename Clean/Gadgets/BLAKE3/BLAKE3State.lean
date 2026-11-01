@@ -1,10 +1,6 @@
-module
-
-public import Clean.Types.U32
-public import Clean.Circuit.Provable
-public import Clean.Specs.BLAKE3
-
-@[expose] public section
+import Clean.Types.U32
+import Clean.Circuit.Provable
+import Clean.Specs.BLAKE3
 
 namespace Gadgets.BLAKE3
 open Specs.BLAKE3

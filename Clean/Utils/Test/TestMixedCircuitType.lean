@@ -1,6 +1,4 @@
-module
-
-public import Clean.Circuit
+import Clean.Circuit
 
 /-!
 This regression test covers a mixed `CircuitType` input: one ordinary provable
@@ -9,8 +7,6 @@ are that `circuit_proof_start` should split the `h_input` equality into
 field-level facts and use them to rewrite constraints from evaluated vars to
 verifier/prover values.
 -/
-
-@[expose] public section
 
 namespace TestMixedCircuitType
 variable {F : Type} [FiniteField F]
@@ -79,25 +75,25 @@ def parent : GeneralFormalCircuit F field field where
     guard_target = input * input⁻¹ = 1
     exact mul_inv_cancel₀ (G₀ := F) h_assumptions
 
-structure BoolU64Input (F : Type) where
+structure BoolNatInput (F : Type) where
   x : F
   isZero : UnconstrainedBool F
-  xU64 : UnconstrainedU64 F
+  xNat : UnconstrainedNat F
 deriving CircuitType
 
 -- TODO automate this in the CircuitType deriver
-instance : Inhabited (Var BoolU64Input F) where
-  default := { x := default, isZero := default, xU64 := default }
+instance : Inhabited (Var BoolNatInput F) where
+  default := { x := default, isZero := default, xNat := default }
 
-def boolU64Circuit : GeneralFormalCircuit.WithHint F BoolU64Input field where
+def boolNatCircuit : GeneralFormalCircuit.WithHint F BoolNatInput field where
   main input := return input.x
 
   Spec input out _ :=
     out = input.x
 
   ProverAssumptions input _ _ :=
-    input.isZero = (UInt64.ofNat (FiniteField.val (F:=F) input.x) = 0) ∧
-    input.xU64 = UInt64.ofNat (FiniteField.val (F:=F) input.x)
+    input.isZero = ((FiniteField.val (F:=F) input.x : ℕ) = 0) ∧
+    input.xNat = FiniteField.val (F:=F) input.x
 
   soundness := by
     circuit_proof_start
@@ -105,21 +101,21 @@ def boolU64Circuit : GeneralFormalCircuit.WithHint F BoolU64Input field where
   completeness := by
     circuit_proof_start
 
-def boolU64Parent : GeneralFormalCircuit F field field where
+def boolNatParent : GeneralFormalCircuit F field field where
   main (input : Expression F) := do
-    boolU64Circuit {
+    boolNatCircuit {
       x := input
       isZero := unconstrainedBool (do return ((input.val =? 0) &&& .true))
-      xU64 := unconstrainedU64 (do return input.val)
+      xNat := unconstrainedNat (do return input.val)
     }
 
   Spec input out _ :=
     out = input
 
   soundness := by
-    circuit_proof_start [boolU64Circuit]
+    circuit_proof_start [boolNatCircuit]
 
   completeness := by
-    circuit_proof_start [boolU64Circuit]
+    circuit_proof_start [boolNatCircuit]
 
 end TestMixedCircuitType

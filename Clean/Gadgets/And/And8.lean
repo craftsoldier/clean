@@ -1,14 +1,11 @@
-module
-
-public import Clean.Circuit
-public import Clean.Gadgets.Xor.ByteXorTable
-
-@[expose] public section
+import Clean.Circuit
+import Clean.Gadgets.Xor.ByteXorTable
+import Clean.Utils.Primes
 
 variable {p : ℕ} [Fact p.Prime] [p_large_enough: Fact (p > 512)]
 
 namespace Gadgets.And.And8
-open Gadgets.Xor (ByteXorTable)
+open Xor (ByteXorTable)
 open FieldUtils
 
 structure Inputs (F : Type) where
@@ -25,10 +22,11 @@ def Spec (input : Inputs (F p)) (z : F p) :=
   z.val = x.val &&& y.val
 
 def main (input : Var Inputs (F p)) : Circuit (F p) (Expression (F p)) := do
-  let and ← witness (input.x.val &&& input.y.val).toField
+  let ⟨x, y⟩ := input
+  let and ← witness (x.val &&& y.val).toField
   -- we prove AND correct using an XOR lookup and the following identity:
-  let xor := input.x + input.y - 2*and
-  lookup ByteXorTable (input.x, input.y, xor)
+  let xor := x + y - 2*and
+  lookup ByteXorTable (x, y, xor)
   return and
 
 -- AND / XOR identity that justifies the circuit
@@ -109,10 +107,8 @@ theorem soundness : Soundness (Input:=Inputs) (Output:=field) (F p) main Assumpt
 
 theorem completeness : Completeness (Input:=Inputs) (Output:=field) (F p) main Assumptions := by
   intro i env ⟨ x_var, y_var ⟩ h_env ⟨ x, y ⟩ h_input h_assumptions
-  -- destructure the byte bounds first, so that the `u64Wrap` simproc can discharge
-  -- the `% 2^64` truncations coming from the witness IR
+  simp_all only [circuit_norm, main, Assumptions, ByteXorTable, Inputs.mk.injEq]
   obtain ⟨ hx_byte, hy_byte ⟩ := h_assumptions
-  simp_all only [circuit_norm, main, ByteXorTable, Inputs.mk.injEq]
   set w : F p := ZMod.val x &&& ZMod.val y
   have hw : w = ZMod.val x &&& ZMod.val y := rfl
 

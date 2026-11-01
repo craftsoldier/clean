@@ -1,10 +1,6 @@
-module
-
-public import Clean.Utils.Field
-public import Clean.Circuit.Expression
-public import Clean.Circuit.Basic
-
-@[expose] public section
+import Clean.Utils.Field
+import Clean.Circuit.Expression
+import Clean.Circuit.Basic
 
 open Lean
 
@@ -14,7 +10,7 @@ instance (p : ℕ) : ToJson (F p) where
 
 variable {F : Type} [FiniteField F] [ToJson F]
 
-def exprToJson : Expression F → Json
+def exprToJson [ToJson F]: Expression F → Json
   | .var v => Json.mkObj [
     ("type", Json.str "var"),
     ("index", Json.num v.index)
@@ -46,7 +42,6 @@ instance : ToJson (Lookup F) where
 instance : ToJson (AbstractInteraction F) where
   toJson i := Json.mkObj [
     ("channel", toJson i.channel.name),
-    ("direction", toJson i.direction.name),
     ("multiplicity", toJson i.mult),
     ("message", toJson i.msg.toArray)
   ]

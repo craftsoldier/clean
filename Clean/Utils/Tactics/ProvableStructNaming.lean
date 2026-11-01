@@ -1,10 +1,6 @@
-module
-
-public meta import Lean.Elab.Tactic
-public meta import Lean.Meta
-public meta import Lean.Structure
-
-public meta section
+import Lean.Elab.Tactic
+import Lean.Meta
+import Lean.Structure
 
 open Lean Meta
 
@@ -36,13 +32,13 @@ def generateStructFieldNames (fvarId : FVarId) : MetaM AltVarNames := do
   let localDecl ← fvarId.getDecl
   let userName := localDecl.userName
 
-  -- Get the type of the variable to extract structure name.
-  -- `.instances`: the type is often spelled through the `Var`/`Value` class projections.
+  -- Get the type of the variable to extract structure name
   let varType ← inferType (.fvar fvarId)
-  let varType' ← withTransparency .instances (whnf varType)
+  let varType' ← whnf varType
 
-  -- Extract the structure name (head constant, so parametric structs like `Inputs M F` work)
-  let structName ← match varType'.getAppFn with
+  -- Extract the structure name
+  let structName ← match varType' with
+  | .app (.const name _) _ => pure name
   | .const name _ => pure name
   | _ => throwError "Cannot extract structure name from type: {varType'}"
 
