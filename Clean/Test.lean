@@ -12,3 +12,4 @@ import Clean.Bellman.Tests.TestConstraintSystem
 import Clean.Bellman.Tests.TestSemantics
 import Clean.Bellman.Tests.TestFormal
 import Clean.Bellman.Tests.TestSubcircuit
+import Clean.Bellman.Tests.TestTopLevel
