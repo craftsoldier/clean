@@ -30,7 +30,8 @@ assignment (`extractPrivate`). `Spec` is the statement's condition on the two, a
 circuit's spec gives it at the values read from any assignment (`spec_of`). A gadget's spec names
 variables only through its input and output, so the statement can rely only on what it says of
 the variables the formal circuit outputs. `Statement p` says some private witness satisfies
-`Spec` at `p`.
+`Spec` at `p`, and public inputs in the relation are exactly the elements of the typed public
+input read from them (`toElements_readPublicInput`).
 
 ## Soundness and completeness
 
@@ -43,9 +44,8 @@ prover-side spec holds on that assignment.
 
 ## Independence through calls
 
-A parent built from calls cannot show by `rfl` that its rows ignore the private data: the calls
-are opaque. `FormalCircuit.Indep` states it for a gadget's closed forms, a parent proves it from
-its children's, and a top-level circuit's `rows_indep` and `nextOffset_indep` follow from it.
+`FormalCircuit.Indep` states that a gadget's closed forms ignore the private data. A parent
+proves it from its children's, without unfolding them, and a top-level circuit carries it.
 
 ## Rust references (groth16 0.2.0)
 
@@ -109,29 +109,33 @@ def extractPublicInput (env : Environment F) : PublicInput F :=
 
 /-- The public input read from the list of public inputs the verifier is given. -/
 def readPublicInput (x : List F) : PublicInput F :=
-  fromElements (Vector.ofFn fun i : Fin (size PublicInput) => x.getD i.val 0)
+  extractPublicInput (withPublic x fun _ => 0)
 
 /-- With inputs `(1, x)`, the public input read from the assignment is the one read from `x`. -/
 theorem extractPublicInput_withPublic (x : List F) (aux : ℕ → F) :
-    extractPublicInput (PublicInput := PublicInput) (withPublic x aux) = readPublicInput x := by
-  simp only [extractPublicInput, readPublicInput, withPublic, List.getElem?_cons_succ,
-    List.getD_eq_getElem?_getD]
+    extractPublicInput (PublicInput := PublicInput) (withPublic x aux) = readPublicInput x := rfl
 
 end
 
+/-- A formal circuit over captured data whose rows, output and next offset do not depend on that
+data. A parent proves it from its children's, through calls. -/
+structure FormalCircuit.Indep {W γ : Type} [HasBelow γ] (G : FormalCircuit F (Option W) γ) :
+    Prop where
+  rows : ∀ w w' o, G.rowsAt w o = G.rowsAt w' o
+  output : ∀ w w' o, G.output w o = G.output w' o
+  nextOffset : ∀ w w' o, G.nextOffset w o = G.nextOffset w' o
+
 /-- A circuit groth16 runs, with the statement it proves: a formal circuit over the prover's
-private data, whose rows and next offset do not depend on that data, since key generation runs it
-with `none` and no witness function (`generator.rs:58-70, 187-191`), and which has no
-`Assumptions`; a public input filling the inputs after ONE; and a private witness and a spec,
-which the formal circuit's spec gives. -/
+private data, whose rows, output and next offset do not depend on that data, since key
+generation runs it with `none` and no witness function (`generator.rs:58-70, 187-191`), and
+which has no `Assumptions`; a public input filling the inputs after ONE; and a private witness
+and a spec, which the formal circuit's spec gives. -/
 structure TopLevelCircuit (F : Type) [Ring F] (W β : Type) [HasBelow β]
     (PublicInput : TypeMap) [ProvableType PublicInput] where
   /-- The underlying formal circuit, over the private data. -/
   formalCircuit : FormalCircuit F (Option W) β
-  /-- Its rows do not depend on the private data. -/
-  rows_indep : ∀ w o, formalCircuit.rowsAt w o = formalCircuit.rowsAt none o
-  /-- Nor does its next offset. -/
-  nextOffset_indep : ∀ w o, formalCircuit.nextOffset w o = formalCircuit.nextOffset none o
+  /-- Its rows, output and next offset do not depend on the private data. -/
+  indep : formalCircuit.Indep
   /-- A top-level circuit has no assumptions supplied by an enclosing circuit. -/
   assumptions_eq : formalCircuit.Assumptions = fun _ _ => True
   /-- The public input fills every input after ONE. -/
@@ -140,11 +144,14 @@ structure TopLevelCircuit (F : Type) [Ring F] (W β : Type) [HasBelow β]
   PrivateWitness : Type
   /-- The private witness read from an assignment. -/
   extractPrivate : Environment F → PrivateWitness
-  /-- The statement's condition, on the public input and the private witness. -/
+  /-- The statement's condition, on the public input and the private witness. The formal
+  circuit's spec implies it, but it may say less; what it says is checked against the protocol
+  where a circuit is stated. -/
   Spec : PublicInput F → PrivateWitness → Prop
-  /-- The formal circuit's spec gives it, at the public input and the private witness read from
-  the assignment. -/
-  spec_of : ∀ env, formalCircuit.Spec env none (formalCircuit.output none Offset.start) →
+  /-- On an assignment where ONE holds `1`, the formal circuit's spec gives it, at the public input
+  and the private witness read from the assignment. -/
+  spec_of : ∀ env, env.input 0 = 1 →
+    formalCircuit.Spec env none (formalCircuit.output none Offset.start) →
     Spec (extractPublicInput env) (extractPrivate env)
 
 namespace TopLevelCircuit
@@ -175,7 +182,7 @@ theorem soundness (x : List F) (aux : ℕ → F)
     (h : ∀ r ∈ self.keyRows, r.Holds (withPublic x aux)) :
     self.Spec (readPublicInput x) (self.extractPrivate (withPublic x aux)) := by
   rw [← extractPublicInput_withPublic x aux]
-  exact self.spec_of _ (self.formalCircuit.soundness _ _ none rfl
+  exact self.spec_of _ rfl (self.formalCircuit.soundness _ _ none rfl
     (by rw [self.assumptions_eq]; trivial) fun r hr => h r (List.mem_append_left _ hr))
 
 /-- **Statement soundness.** Public inputs in the relation satisfy the statement. -/
@@ -183,6 +190,19 @@ theorem statement_soundness (x : List F) (h : self.Relation x) :
     self.Statement (readPublicInput x) :=
   let ⟨_, aux, hrows⟩ := h
   ⟨_, self.soundness x aux hrows⟩
+
+/-- Public inputs in the relation are exactly the elements of the typed public input read from
+them. -/
+theorem toElements_readPublicInput (x : List F) (h : self.Relation x) :
+    (toElements (readPublicInput (PublicInput := PublicInput) x)).toList = x := by
+  -- the relation's count and `numInputs_eq` make `x` as long as the public input
+  have hlen : x.length = size PublicInput := by
+    have := h.1; simp only [numInputs, self.numInputs_eq] at this; omega
+  rw [readPublicInput, extractPublicInput, ProvableType.toElements_fromElements,
+    Vector.toList_ofFn]
+  apply List.ext_getElem (by simp [hlen])
+  intro i h₁ h₂
+  simp [withPublic, List.getElem?_eq_getElem h₂]
 
 /-- **Completeness.** For any private data, given the prover-side assumptions on the assignment
 the prover computes, the public inputs it computes, starting from inputs `[1]` and no auxiliary
@@ -210,7 +230,7 @@ theorem completeness (hint : ProverHint F) (w : W)
       ((self.formalCircuit.main (some w)).operations Offset.start) [1] [])
     rw [hs] at h
     exact h
-  rw [self.formalCircuit.advance_eq, self.nextOffset_indep] at hlen
+  rw [self.formalCircuit.advance_eq, self.indep.nextOffset (some w) none] at hlen
   have henv : withPublic i₂
       (self.formalCircuit.computedEnv hint (some w) Offset.start [1] []).aux
       = (self.formalCircuit.computedEnv hint (some w) Offset.start [1] []).toEnvironment := by
@@ -225,18 +245,10 @@ theorem completeness (hint : ProverHint F) (w : W)
     rw [henv]
     intro r hr
     rcases List.mem_append.1 hr with hr | hr
-    · rw [← self.rows_indep (some w)] at hr
+    · rw [← self.indep.rows (some w) none] at hr
       exact hc.1 r hr
     · exact extraRows_holds _ _ r hr
 
 end TopLevelCircuit
-
-/-- A formal circuit over captured data whose rows, output and next offset do not depend on that
-data. A parent proves it from its children's, through calls. -/
-structure FormalCircuit.Indep {W γ : Type} [HasBelow γ] (G : FormalCircuit F (Option W) γ) :
-    Prop where
-  rows : ∀ w w' o, G.rowsAt w o = G.rowsAt w' o
-  output : ∀ w w' o, G.output w o = G.output w' o
-  nextOffset : ∀ w w' o, G.nextOffset w o = G.nextOffset w' o
 
 end Bellman

@@ -7,13 +7,15 @@ Pins top-level circuits, from a private value to the relation on public inputs:
 - a square: a private `x`, the public input `y = x · x` and the row `x · x = y`, with the
   statement that `y` is the square of the private witness. The key's rows are that row and one
   appended row for each of ONE and `y`; an assignment satisfying them has `y = aux 0 ^ 2`, so over
-  `ZMod 7` the relation rejects `[3]`, and it rejects the wrong number of inputs; the prover's
-  public inputs are in it and are `[x · x]`, and its private value is `x`;
+  `ZMod 7` the relation rejects `[3]`, and it rejects the wrong number of inputs; public inputs in
+  it are the typed public input's elements; the prover's public inputs are in it and are
+  `[x · x]`, and its private value is `x`;
 - a parent built from calls: a private bit (`AllocatedBit::alloc`), then a private value made
   public (`AllocatedNum::alloc`, `inputize`), made top-level from the children's independence
   alone, with the children's prover-side assumptions and specs as its own. Its statement: the
   private bit is boolean and the public input is the private value. The prover's public input is
   the value;
+- a public input of two elements: field `k` reads input `k + 1`;
 - a circuit with no public inputs: the relation holds exactly at `[]`.
 -/
 
@@ -75,14 +77,13 @@ def square : FormalCircuit F (Option F) (Variable × Variable) where
 
 def squareTop : TopLevelCircuit F F (Variable × Variable) Single where
   formalCircuit := square
-  rows_indep _ _ := rfl
-  nextOffset_indep _ _ := rfl
+  indep := ⟨fun _ _ _ => rfl, fun _ _ _ => rfl, fun _ _ _ => rfl⟩
   assumptions_eq := rfl
   numInputs_eq := rfl
   PrivateWitness := F
   extractPrivate env := env.aux 0
   Spec p x := p.y = x ^ 2
-  spec_of _ h := h
+  spec_of _ _ h := h
 
 -- the key's rows: the circuit's one row, then one appended row for each of ONE and `y`
 example : ((squareTop (F := ZMod 7)).formalCircuit.rowsAt none Offset.start).length = 1 ∧
@@ -102,6 +103,11 @@ example : ¬ (squareTop (F := ZMod 7)).Relation [3] := by
     (squareTop (F := ZMod 7)).statement_soundness [3] h
   obtain ⟨x, hx⟩ := h'
   revert hx; revert x; decide
+
+-- public inputs in the relation are the typed public input's elements
+example (y : F) (h : (squareTop (F := F)).Relation [y]) :
+    (toElements (readPublicInput (PublicInput := Single) [y])).toList = [y] :=
+  squareTop.toElements_readPublicInput [y] h
 
 -- the wrong number of public inputs is not in the relation
 example (a b : F) :
@@ -249,14 +255,13 @@ theorem pairBitPub_indep : (pair (F := F) allocBit pub rfl rfl).Indep :=
 
 def pairTop : TopLevelCircuit F (Bool × F) (Variable × (Variable × Variable)) Single where
   formalCircuit := pair allocBit pub rfl rfl
-  rows_indep w o := pairBitPub_indep.rows w none o
-  nextOffset_indep w o := pairBitPub_indep.nextOffset w none o
+  indep := pairBitPub_indep
   assumptions_eq := rfl
   numInputs_eq := rfl
   PrivateWitness := F × F
   extractPrivate env := (env.aux 0, env.aux 1)
   Spec p bv := (bv.1 = 0 ∨ bv.1 = 1) ∧ p.y = bv.2
-  spec_of _ h := h
+  spec_of _ _ h := h
 
 -- the key's rows: the two children's rows, then one appended row for each of ONE and the value
 example : ((pairTop (F := ZMod 7)).formalCircuit.rowsAt none Offset.start).length = 2 ∧
@@ -282,20 +287,41 @@ example (hint : ProverHint F) (b : Bool) (v : F) :
   simp only [pairTop, pair, pairMain, circuit_norm, FormalCircuit.operations_call]
   rfl
 
+/-! ## Two public inputs -/
+
+/-- Two public field elements. -/
+structure Two (F : Type) where
+  a : F
+  b : F
+
+instance : ProvableType Two where
+  size := 2
+  toElements p := #v[p.a, p.b]
+  fromElements v := ⟨v[0], v[1]⟩
+  toElements_fromElements v := by
+    rw [Vector.ext_iff]; intro i hi
+    rcases (show i = 0 ∨ i = 1 by omega) with rfl | rfl <;> rfl
+  fromElements_toElements _ := rfl
+
+-- field `k` of the public input reads input `k + 1`, after ONE
+example : let p : Two (ZMod 7) :=
+      extractPublicInput (⟨fun i => (i : ZMod 7), fun _ => 0⟩ : Environment (ZMod 7))
+    p.a = 1 ∧ p.b = 2 := by
+  decide
+
 /-! ## No public inputs -/
 
 /-- A private bit, with no public input (`unit`): the statement is that some private value is a
 bit. -/
 def bitTop : TopLevelCircuit F Bool Variable unit where
   formalCircuit := allocBit
-  rows_indep _ _ := rfl
-  nextOffset_indep _ _ := rfl
+  indep := ⟨fun _ _ _ => rfl, fun _ _ _ => rfl, fun _ _ _ => rfl⟩
   assumptions_eq := rfl
   numInputs_eq := rfl
   PrivateWitness := F
   extractPrivate env := env.aux 0
   Spec _ b := b = 0 ∨ b = 1
-  spec_of _ h := h
+  spec_of _ _ h := h
 
 -- with no public input, the relation holds at `[]`, and only there
 example : (bitTop (F := F)).Relation [] ∧ ∀ a : F, ¬ (bitTop (F := F)).Relation [a] := by
